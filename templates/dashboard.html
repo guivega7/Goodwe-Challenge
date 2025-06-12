@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set active_page = 'dashboard' %}
+{% block title %}Dashboard | SolarMind{% endblock %}
+
+{% block content %}
+<div class="mb-4 text-center">
+  <h2 class="fw-bold" style="color:#FE5800;">Dashboard de Energia Solar</h2>
+  <p class="lead">Visualize o desempenho do seu sistema GoodWe em tempo real.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="glass p-4 text-center">
+      <i class="fa-solid fa-bolt fa-2x mb-2" style="color:#FE5800;"></i>
+      <h6 class="fw-semibold">Potência Instantânea</h6>
+      <div class="display-6 fw-bold mb-1" style="color:#232323;">{{ potencia_instantanea }} kW</div>
+      <div class="text-muted small">Atualizado agora</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass p-4 text-center">
+      <i class="fa-solid fa-sun fa-2x mb-2" style="color:#FE5800;"></i>
+      <h6 class="fw-semibold">Energia Gerada Hoje</h6>
+      <div class="display-6 fw-bold mb-1" style="color:#232323;">{{ energia_hoje }} kWh</div>
+      <div class="text-muted small">Desde 00:00</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass p-4 text-center">
+      <i class="fa-solid fa-leaf fa-2x mb-2" style="color:#FE5800;"></i>
+      <h6 class="fw-semibold">CO₂ Evitado</h6>
+      <div class="display-6 fw-bold mb-1" style="color:#232323;">{{ co2_evitar }} kg</div>
+      <div class="text-muted small">Impacto ambiental</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass mt-5 p-4">
+  <h5 class="fw-semibold mb-3" style="color:#FE5800;">Gráfico de Geração (Últimas 24h)</h5>
+  <canvas id="graficoGeracao" height="100"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Exemplo de gráfico (substitua pelos seus dados reais)
+  const ctx = document.getElementById('graficoGeracao').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ labels|safe }},
+      datasets: [{
+        label: 'Geração (kWh)',
+        data: {{ dados_geracao|safe }},
+        borderColor: '#FE5800',
+        backgroundColor: 'rgba(254,88,0,0.08)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#eee' } }
+      }
+    }
+  });
+</script>
+{% endblock %}

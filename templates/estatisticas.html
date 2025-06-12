@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set active_page = 'estatisticas' %}
+{% block title %}Estatísticas | SolarMind{% endblock %}
+
+{% block content %}
+<div class="mb-4 text-center">
+  <h2 class="fw-bold" style="color:#FE5800;">Estatísticas Avançadas</h2>
+  <p class="lead">Acompanhe o histórico e tendências do seu sistema GoodWe.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="glass p-4">
+      <h6 class="fw-semibold mb-3" style="color:#FE5800;">Geração Mensal (kWh)</h6>
+      <canvas id="graficoMensal" height="120"></canvas>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="glass p-4">
+      <h6 class="fw-semibold mb-3" style="color:#FE5800;">Comparativo Anual</h6>
+      <canvas id="graficoAnual" height="120"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="glass mt-5 p-4">
+  <h5 class="fw-semibold mb-3" style="color:#FE5800;">Resumo</h5>
+  <ul class="list-unstyled mb-0">
+    <li><i class="fa-solid fa-check-circle me-2" style="color:#FE5800;"></i> Total gerado: <strong>{{ total_gerado }} kWh</strong></li>
+    <li><i class="fa-solid fa-check-circle me-2" style="color:#FE5800;"></i> Economia estimada: <strong>R$ {{ economia }}</strong></li>
+    <li><i class="fa-solid fa-check-circle me-2" style="color:#FE5800;"></i> CO₂ evitado: <strong>{{ co2_total }} kg</strong></li>
+  </ul>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Exemplo de gráfico mensal
+  new Chart(document.getElementById('graficoMensal').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: {{ meses|safe }},
+      datasets: [{
+        label: 'kWh',
+        data: {{ dados_mensais|safe }},
+        backgroundColor: '#FE5800'
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#eee' } }
+      }
+    }
+  });
+
+  // Exemplo de gráfico anual
+  new Chart(document.getElementById('graficoAnual').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: {{ anos|safe }},
+      datasets: [{
+        label: 'kWh',
+        data: {{ dados_anuais|safe }},
+        borderColor: '#FE5800',
+        backgroundColor: 'rgba(254,88,0,0.08)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#eee' } }
+      }
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Início | SolarMind{% endblock %}
+{% set active_page = 'home' %}
+{% block content %}
+<div class="text-center py-4">
+  <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SolarMind" style="height:64px; margin-bottom: 1rem;" />
+  <h1 class="fw-bold mb-3" style="color:#FE5800;">Bem-vindo ao SolarMind</h1>
+  <p class="lead mb-4" style="max-width:600px; margin:auto;">
+    Plataforma inteligente para monitoramento, análise e visualização de dados de energia solar, baseada na tecnologia GoodWe.
+  </p>
+  <a href="{{ url_for('dash.dashboard') }}" class="btn btn-gw btn-lg px-4">Acessar Dashboard</a>
+</div>
+
+<div class="row mt-5">
+  <div class="col-md-4 mb-4">
+    <div class="glass p-4 h-100 text-center">
+      <i class="fa-solid fa-solar-panel fa-2x mb-3" style="color:#FE5800;"></i>
+      <h5 class="fw-semibold mb-2">Monitoramento em Tempo Real</h5>
+      <p class="mb-0">Acompanhe a geração de energia dos seus sistemas GoodWe com dados atualizados e gráficos intuitivos.</p>
+    </div>
+  </div>
+  <div class="col-md-4 mb-4">
+    <div class="glass p-4 h-100 text-center">
+      <i class="fa-solid fa-chart-line fa-2x mb-3" style="color:#FE5800;"></i>
+      <h5 class="fw-semibold mb-2">Estatísticas Avançadas</h5>
+      <p class="mb-0">Visualize históricos, tendências e comparativos para otimizar o desempenho das suas instalações.</p>
+    </div>
+  </div>
+  <div class="col-md-4 mb-4">
+    <div class="glass p-4 h-100 text-center">
+      <i class="fa-solid fa-bolt fa-2x mb-3" style="color:#FE5800;"></i>
+      <h5 class="fw-semibold mb-2">Tecnologia GoodWe</h5>
+      <p class="mb-0">Integração total com inversores e soluções GoodWe, garantindo confiabilidade e inovação.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
