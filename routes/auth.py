@@ -13,7 +13,7 @@ def login():
         if usuario and usuario.checar_senha(senha):
             session['usuario_id'] = usuario.id
             session['usuario_nome'] = usuario.nome
-            return redirect(url_for('main.home'))
+            return redirect(url_for('dash.dashboard'))
         else:
             flash('Nome ou senha inválidos.')
     return render_template('login.html')
