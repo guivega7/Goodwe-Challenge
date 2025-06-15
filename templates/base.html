@@ -52,15 +52,16 @@
     }
     /* Glassmorphism effect for main content */
     .glass {
-      background: rgba(255,255,255,0.18);
+      background: rgba(30, 30, 30, 0.85);
       border-radius: 18px;
       box-shadow: 0 8px 32px 0 rgba(31,38,135,0.10);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.10);
       padding: 2rem 2.5rem;
       margin-top: 2rem;
       margin-bottom: 2rem;
+      color: #fff;
     }
     .tech-gradient {
       background: linear-gradient(120deg, #FE5800 0%, #ffb347 100%);
@@ -104,9 +105,9 @@
           {% endif %}
           <li class="nav-item"><a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dash.dashboard') }}">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'estatisticas' %}active{% endif %}" href="{{ url_for('estatisticas.estatisticas') }}">Estatísticas</a></li>
-          {% if session.get('usuario') %}
+          {% if session.get('usuario_id') %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Sair</a></li>
-          {% else %}
+          {% elif active_page not in ['dashboard', 'estatisticas'] %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.login') }}">Entrar</a></li>
           {% endif %}
         </ul>

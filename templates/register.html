@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Cadastro - SolarMind{% endblock %}
 {% set active_page = '' %}
+{% set sem_glass = True %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-6 col-lg-4">
@@ -22,13 +23,21 @@
           <input type="text" class="form-control" id="nome" name="nome" required>
         </div>
         <div class="mb-3">
+          <label for="email" class="form-label">E-mail</label>
+          <input type="email" class="form-control" id="email" name="email" required>
+        </div>
+        <div class="mb-3">
           <label for="senha" class="form-label">Senha</label>
           <input type="password" class="form-control" id="senha" name="senha" required>
+        </div>
+        <div class="mb-3">
+          <label for="confirmar_senha" class="form-label">Confirmar Senha</label>
+          <input type="password" class="form-control" id="confirmar_senha" name="confirmar_senha" required>
         </div>
         <button type="submit" class="btn btn-gw w-100">Cadastrar</button>
       </form>
       <div class="text-center mt-3">
-        <a href="{{ url_for('auth.login') }}" class="text-decoration-none" style="color:#FE5800;">Já tenho conta</a>
+        <a href="{{ url_for('auth.login') }}" class="text-decoration-none" style="color:#FE5800;">Já tem conta? Entrar</a>
       </div>
     </div>
   </div>
