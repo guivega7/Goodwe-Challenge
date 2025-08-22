@@ -4,6 +4,12 @@ import os
 from extensions import db
 
 def create_app():
+    
+    '''
+    Função de criação da aplicação Flask.
+    Carrega as configurações, inicializa o banco de dados e registra os blueprints.
+    
+    '''
     load_dotenv()
     app = Flask(__name__)
     app.secret_key = os.getenv('SECRET_KEY')
@@ -18,11 +24,13 @@ def create_app():
     from routes.api import api_bp
     from routes.main import main_bp
     from routes.estatisticas import estatisticas_bp
+    from routes.aparelhos import aparelhos_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dash_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(main_bp)
+    app.register_blueprint(aparelhos_bp)
     app.register_blueprint(estatisticas_bp)
 
     return app

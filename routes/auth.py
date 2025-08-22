@@ -6,6 +6,11 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    '''
+    Função de Login do usuario.
+    Verifica se o usuário já está logado, caso sim, redireciona para o dashboard.
+    Se não estiver logado, renderiza o template de login.
+    '''
     if request.method == 'POST':
         nome = request.form['nome']
         senha = request.form['senha']
@@ -20,6 +25,11 @@ def login():
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    '''
+    Função de Registro do usuário.
+    Verifica se o usuário já está logado, caso sim, redireciona para o dashboard.
+    Se não estiver logado, renderiza o template de registro.
+    '''
     if request.method == 'POST':
         nome = request.form['nome']
         email = request.form['email']
@@ -49,5 +59,9 @@ def register():
 
 @auth_bp.route('/logout')
 def logout():
+    '''
+    Função de Logout do usuário.
+    Limpa a sessão do usuário e redireciona para a página inicial.
+    '''
     session.clear()
     return redirect(url_for('main.home'))

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2 class="fw-bold" style="color:#FE5800;">Gerenciar Aparelhos</h2>
+    
+    <!-- Formulário para adicionar aparelho -->
+    <div class="glass mt-4 p-4">
+        <h5 class="mb-3">Adicionar Aparelho</h5>
+        <form action="{{ url_for('aparelhos.adicionar') }}" method="POST">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" name="nome" class="form-control" placeholder="Nome do aparelho" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="number" step="0.1" name="consumo" class="form-control" placeholder="Consumo (kWh)" required>
+                </div>
+                <div class="col-md-3">
+                    <select name="prioridade" class="form-select" required>
+                        <option value="">Prioridade</option>
+                        <option value="1">Alta (Essencial)</option>
+                        <option value="2">Média-Alta</option>
+                        <option value="3">Média</option>
+                        <option value="4">Média-Baixa</option>
+                        <option value="5">Baixa (Pode desligar)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Adicionar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de aparelhos -->
+    <div class="glass mt-4 p-4">
+        <h5 class="mb-3">Seus Aparelhos</h5>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Aparelho</th>
+                        <th>Consumo (kWh)</th>
+                        <th>Prioridade</th>
+                        <th>Status</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for aparelho in aparelhos %}
+                    <tr>
+                        <td>{{ aparelho.nome }}</td>
+                        <td>{{ aparelho.consumo }}</td>
+                        <td>
+                            {% if aparelho.prioridade == 1 %}
+                            <span class="badge bg-danger">Alta</span>
+                            {% elif aparelho.prioridade == 2 %}
+                            <span class="badge bg-warning">Média-Alta</span>
+                            {% elif aparelho.prioridade == 3 %}
+                            <span class="badge bg-info">Média</span>
+                            {% elif aparelho.prioridade == 4 %}
+                            <span class="badge bg-primary">Média-Baixa</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Baixa</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if aparelho.status %}
+                            <span class="text-success">Ligado</span>
+                            {% else %}
+                            <span class="text-danger">Desligado</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary">Alterar Status</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
