@@ -7,7 +7,7 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     '''
-    Função de Login do usuario.
+    Função de Login do usuário.
     Verifica se o usuário já está logado, caso sim, redireciona para o dashboard.
     Se não estiver logado, renderiza o template de login.
     '''

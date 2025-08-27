@@ -4,12 +4,10 @@ import os
 from extensions import db
 
 def create_app():
-    
-    '''
-    Função de criação da aplicação Flask.
-    Carrega as configurações, inicializa o banco de dados e registra os blueprints.
-    
-    '''
+    """
+    Função de criação da aplicação Flask SolarMind.
+    Carrega as configurações, inicializa o banco de dados e registra as rotas.
+    """
     load_dotenv()
     app = Flask(__name__)
     app.secret_key = os.getenv('SECRET_KEY')
@@ -18,7 +16,7 @@ def create_app():
 
     db.init_app(app)
 
-    # Importação dos blueprints dentro da função para evitar importação circular
+    # Importação das rotas para evitar importação circular
     from routes.auth import auth_bp
     from routes.dashboard import dash_bp
     from routes.api import api_bp
@@ -26,6 +24,7 @@ def create_app():
     from routes.estatisticas import estatisticas_bp
     from routes.aparelhos import aparelhos_bp
 
+    # Registro das rotas
     app.register_blueprint(auth_bp)
     app.register_blueprint(dash_bp)
     app.register_blueprint(api_bp)
@@ -35,7 +34,7 @@ def create_app():
 
     return app
 
-# Para rodar localmente
+# Execução local
 if __name__ == "__main__":
     app = create_app()
     app.run(debug=True)

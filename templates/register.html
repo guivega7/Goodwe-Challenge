@@ -1,44 +1,78 @@
 {% extends "base.html" %}
-{% block title %}Cadastro - SolarMind{% endblock %}
-{% set active_page = '' %}
-{% set sem_glass = True %}
+{% block title %}Criar Conta | SolarMind{% endblock %}
+{% set active_page = 'register' %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-6 col-lg-4">
-    <div class="card glass border-0 shadow-sm p-4">
-      <div class="text-center mb-4">
-        <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SolarMind" height="40" />
-        <h4 class="fw-bold mt-3 mb-0" style="color:#FE5800;">Criar Conta</h4>
-      </div>
-      {% with messages = get_flashed_messages() %}
-        {% if messages %}
-          <div class="alert alert-danger">
-            {{ messages[0] }}
-          </div>
-        {% endif %}
-      {% endwith %}
+  <div class="col-md-6 col-lg-5">
+    <div class="text-center mb-4">
+      <i class="fa-solid fa-user-plus fa-4x mb-3" style="color:#FE5800;"></i>
+      <h2 class="fw-bold" style="color:#FE5800;">Criar Conta</h2>
+      <p class="text-light">Junte-se ao SolarMind e monitore seu sistema solar</p>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+          <i class="fa-solid fa-exclamation-triangle me-2"></i>
+          {{ messages[0] }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="glass p-4">
       <form method="post" action="{{ url_for('auth.register') }}">
         <div class="mb-3">
-          <label for="nome" class="form-label">Nome</label>
-          <input type="text" class="form-control" id="nome" name="nome" required>
+          <label for="nome" class="form-label">
+            <i class="fa-solid fa-user me-2"></i>Nome de Usuário
+          </label>
+          <input type="text" class="form-control form-control-lg" id="nome" name="nome" 
+                 placeholder="Escolha um nome de usuário" required>
         </div>
+        
         <div class="mb-3">
-          <label for="email" class="form-label">E-mail</label>
-          <input type="email" class="form-control" id="email" name="email" required>
+          <label for="email" class="form-label">
+            <i class="fa-solid fa-envelope me-2"></i>E-mail
+          </label>
+          <input type="email" class="form-control form-control-lg" id="email" name="email" 
+                 placeholder="Digite seu e-mail" required>
         </div>
+        
         <div class="mb-3">
-          <label for="senha" class="form-label">Senha</label>
-          <input type="password" class="form-control" id="senha" name="senha" required>
+          <label for="senha" class="form-label">
+            <i class="fa-solid fa-lock me-2"></i>Senha
+          </label>
+          <input type="password" class="form-control form-control-lg" id="senha" name="senha" 
+                 placeholder="Crie uma senha segura" required>
         </div>
-        <div class="mb-3">
-          <label for="confirmar_senha" class="form-label">Confirmar Senha</label>
-          <input type="password" class="form-control" id="confirmar_senha" name="confirmar_senha" required>
+        
+        <div class="mb-4">
+          <label for="confirmar_senha" class="form-label">
+            <i class="fa-solid fa-lock-check me-2"></i>Confirmar Senha
+          </label>
+          <input type="password" class="form-control form-control-lg" id="confirmar_senha" name="confirmar_senha" 
+                 placeholder="Confirme sua senha" required>
         </div>
-        <button type="submit" class="btn btn-gw w-100">Cadastrar</button>
+        
+        <button type="submit" class="btn btn-gw btn-lg w-100 mb-3">
+          <i class="fa-solid fa-user-plus me-2"></i>Criar Conta
+        </button>
       </form>
-      <div class="text-center mt-3">
-        <a href="{{ url_for('auth.login') }}" class="text-decoration-none" style="color:#FE5800;">Já tem conta? Entrar</a>
+      
+      <div class="text-center">
+        <p class="text-light mb-2">Já tem uma conta?</p>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-outline-light">
+          <i class="fa-solid fa-sign-in-alt me-2"></i>Fazer Login
+        </a>
       </div>
+    </div>
+
+    <div class="text-center mt-4">
+      <small class="text-light">
+        <i class="fa-solid fa-info-circle me-1"></i>
+        Ao criar uma conta, você aceita nossos termos de uso
+      </small>
     </div>
   </div>
 </div>

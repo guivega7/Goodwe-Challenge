@@ -3,105 +3,233 @@
 {% block title %}Dashboard | SolarMind{% endblock %}
 
 {% block content %}
-<div class="mb-4 text-center">
+<!-- Header Section -->
+<div class="text-center mb-5">
+  <i class="fa-solid fa-chart-line fa-4x mb-3" style="color:#FE5800;"></i>
   <h2 class="fw-bold" style="color:#FE5800;">Dashboard de Energia Solar</h2>
-  <p class="lead">Visualize o desempenho do seu sistema GoodWe em tempo real.</p>
+  <p class="lead text-light">Monitore o desempenho do seu sistema GoodWe em tempo real</p>
 </div>
 
-<div class="row g-4">
-  <div class="col-md-4">
-    <div class="glass p-4 text-center">
-      <i class="fa-solid fa-bolt fa-2x mb-2" style="color:#FE5800;"></i>
-      <h6 class="fw-semibold">Potência Instantânea</h6>
-      <div class="display-6 fw-bold mb-1" style="color:#ffffff;">{{ potencia_instantanea }} kW</div>
-      <div class="text-muted small">Atualizado agora</div>
+<!-- Controles de Fonte de Dados -->
+<div class="glass p-4 mb-4">
+  <div class="d-flex align-items-center mb-3">
+    <i class="fa-solid fa-cogs fa-2x me-3" style="color:#FE5800;"></i>
+    <h5 class="fw-semibold mb-0" style="color:#FE5800;">Configuração de Dados</h5>
+  </div>
+  
+  <form method="GET" action="/dashboard" class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">
+        <i class="fa-solid fa-database me-2"></i>Fonte de Dados:
+      </label>
+      <select name="fonte" class="form-select form-select-lg" onchange="toggleSnInput()">
+        <option value="mock" {% if request.args.get('fonte', 'mock') == 'mock' %}selected{% endif %}>
+          🔵 Dados Simulados (Mock)
+        </option>
+        <option value="api" {% if request.args.get('fonte') == 'api' %}selected{% endif %}>
+          🔗 GoodWe SEMS API
+        </option>
+      </select>
+    </div>
+    
+    <div class="col-md-6" id="snContainer" style="{% if request.args.get('fonte', 'mock') == 'mock' %}display:none;{% endif %}">
+      <label class="form-label">
+        <i class="fa-solid fa-microchip me-2"></i>Número de Série do Inversor:
+      </label>
+      <input type="text" name="sn" class="form-control form-control-lg" 
+             placeholder="Ex: 75000ESN333WV001" 
+             value="{{ request.args.get('sn', '') }}">
+    </div>
+    
+    <div class="col-md-2">
+      <label class="form-label">&nbsp;</label>
+      <button type="submit" class="btn btn-gw btn-lg d-block w-100">
+        <i class="fa-solid fa-sync-alt me-2"></i>Atualizar
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Status da Fonte de Dados -->
+{% if relatorio.fonte_dados %}
+<div class="alert {% if 'não encontrado' in relatorio.fonte_dados or '❌' in relatorio.fonte_dados %}alert-danger{% elif 'Simulados' in relatorio.fonte_dados %}alert-info{% else %}alert-success{% endif %} text-center mb-4">
+  <div class="d-flex align-items-center justify-content-center">
+    <i class="fa-solid fa-{% if 'não encontrado' in relatorio.fonte_dados or '❌' in relatorio.fonte_dados %}exclamation-triangle{% elif 'Simulados' in relatorio.fonte_dados %}info-circle{% else %}check-circle{% endif %} fa-2x me-3"></i>
+    <div>
+      <strong>Fonte dos dados:</strong> {{ relatorio.fonte_dados }}<br>
+      <small>Última atualização: {{ relatorio.data_update }}</small>
+      {% if request.args.get('sn') and 'não encontrado' not in relatorio.fonte_dados %}
+      <br><small>Inversor: {{ request.args.get('sn') }}</small>
+      {% endif %}
     </div>
   </div>
-  <div class="col-md-4">
+</div>
+{% endif %}
+
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show" role="alert">
+        <i class="fa-solid fa-{% if category == 'error' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %} me-2"></i>
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- KPIs Cards -->
+<div class="row g-4 mb-5">
+  <div class="col-lg-3 col-md-6">
     <div class="glass p-4 text-center">
-      <i class="fa-solid fa-sun fa-2x mb-2" style="color:#FE5800;"></i>
-      <h6 class="fw-semibold">Energia Gerada Hoje</h6>
-      <div class="display-6 fw-bold mb-1" style="color:#ffffff;">{{ energia_hoje }} kWh</div>
-      <div class="text-muted small">Desde 00:00</div>
+      <i class="fa-solid fa-bolt fa-3x mb-3" style="color:#FE5800;"></i>
+      <h6 class="text-light mb-1">Potência Atual</h6>
+      <h3 class="fw-bold" style="color:#FE5800;">{{ relatorio.potencia_atual or 0 }}</h3>
+      <small class="text-light">kW instantâneos</small>
     </div>
   </div>
-  <div class="col-md-4">
+  
+  <div class="col-lg-3 col-md-6">
     <div class="glass p-4 text-center">
-      <i class="fa-solid fa-leaf fa-2x mb-2" style="color:#FE5800;"></i>
-      <h6 class="fw-semibold">CO₂ Evitado</h6>
-      <div class="display-6 fw-bold mb-1" style="color:#ffffff;">{{ co2_evitar }} kg</div>
-      <div class="text-muted small">Impacto ambiental</div>
+      <i class="fa-solid fa-sun fa-3x mb-3" style="color:#ffc107;"></i>
+      <h6 class="text-light mb-1">Energia Hoje</h6>
+      <h3 class="fw-bold" style="color:#ffc107;">{{ relatorio.energia_hoje or 0 }}</h3>
+      <small class="text-light">kWh gerados</small>
+    </div>
+  </div>
+  
+  <div class="col-lg-3 col-md-6">
+    <div class="glass p-4 text-center">
+      <i class="fa-solid fa-battery-three-quarters fa-3x mb-3" style="color:#28a745;"></i>
+      <h6 class="text-light mb-1">SOC Bateria</h6>
+      <h3 class="fw-bold" style="color:#28a745;">{{ relatorio.soc_bateria or 0 }}</h3>
+      <small class="text-light">% carregada</small>
+    </div>
+  </div>
+  
+  <div class="col-lg-3 col-md-6">
+    <div class="glass p-4 text-center">
+      <i class="fa-solid fa-{% if relatorio.status == 'online' %}wifi{% else %}wifi-slash{% endif %} fa-3x mb-3" 
+         style="color:{% if relatorio.status == 'online' %}#28a745{% else %}#6c757d{% endif %};"></i>
+      <h6 class="text-light mb-1">Status Sistema</h6>
+      <h3 class="fw-bold" style="color:{% if relatorio.status == 'online' %}#28a745{% else %}#6c757d{% endif %};">
+        {{ relatorio.status|title or 'Offline' }}
+      </h3>
+      <small class="text-light">estado atual</small>
     </div>
   </div>
 </div>
 
-<!-- Bloco do Relatório do Dia -->
-<div class="glass mt-5 p-4">
-  <h5 class="fw-semibold mb-3" style="color:#FE5800;">Relatório do Dia</h5>
-  <ul class="list-unstyled mb-0">
-    <li><strong>Energia consumida:</strong> {{ relatorio.consumo }} kWh</li>
-    <li><strong>Energia gerada:</strong> {{ relatorio.geracao }} kWh</li>
-    <li><strong>Saldo:</strong> {{ relatorio.saldo }} kWh</li>
-    <li><strong>Custo estimado:</strong> R$ {{ relatorio.custo }}</li>
-  </ul>
+<!-- Métricas Secundárias -->
+<div class="glass p-4 mb-4">
+  <div class="d-flex align-items-center mb-3">
+    <i class="fa-solid fa-chart-pie fa-2x me-3" style="color:#FE5800;"></i>
+    <h5 class="fw-semibold mb-0" style="color:#FE5800;">Impacto Ambiental e Financeiro</h5>
+  </div>
+  
+  <div class="row text-center">
+    <div class="col-md-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-leaf fa-2x mb-2" style="color:#20c997;"></i>
+        <h6 class="text-light">CO₂ Evitado Hoje</h6>
+        <h4 class="fw-bold" style="color:#20c997;">{{ relatorio.co2_evitado or 0 }} kg</h4>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-money-bill-wave fa-2x mb-2" style="color:#ffc107;"></i>
+        <h6 class="text-light">Economia Hoje</h6>
+        <h4 class="fw-bold" style="color:#ffc107;">R$ {{ relatorio.economia_hoje or 0 }}</h4>
+      </div>
+    </div>
+  </div>
 </div>
 
-<div class="glass mt-5 p-4">
-  <h5 class="fw-semibold mb-3" style="color:#FE5800;">Gráfico de Geração (Últimas 24h)</h5>
-  <canvas id="graficoGeracao" height="100"></canvas>
+<!-- Gráfico Histórico 7 Dias -->
+<div class="glass p-4">
+  <div class="d-flex align-items-center mb-4">
+    <i class="fa-solid fa-chart-area fa-2x me-3" style="color:#FE5800;"></i>
+    <h5 class="fw-semibold mb-0" style="color:#FE5800;">Histórico dos Últimos 7 Dias</h5>
+  </div>
+  <canvas id="graficoHistorico" height="300"></canvas>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  // Função para mostrar/esconder campo SN
+  function toggleSnInput() {
+    const fonte = document.querySelector('select[name="fonte"]').value;
+    const snContainer = document.getElementById('snContainer');
+    if (fonte === 'api') {
+      snContainer.style.display = 'block';
+    } else {
+      snContainer.style.display = 'none';
+    }
+  }
 
-    <!-- Bloco do Histórico dos Últimos 7 Dias -->
-<div class="glass mt-5 p-4">
-  <h5 class="fw-semibold mb-3" style="color:#FE5800;">Histórico dos Últimos 7 Dias</h5>
-  <div class="table-responsive">
-    <table class="table table-sm table-bordered align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Dia</th>
-          <th>Consumo (kWh)</th>
-          <th>Geração (kWh)</th>
-          <th>Custo (R$)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for dia in historico %}
-        <tr>
-          <td>{{ dia.dia }}</td>
-          <td>{{ dia.consumo }}</td>
-          <td>{{ dia.geracao }}</td>
-          <td>R$ {{ dia.custo }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-  // Exemplo de gráfico 
-  const ctx = document.getElementById('graficoGeracao').getContext('2d');
+  // Gráfico de histórico
+  const ctx = document.getElementById('graficoHistorico').getContext('2d');
+  
+  const historicoDados = [
+    {% if relatorio.historico_7dias %}
+      {% for dia in relatorio.historico_7dias %}
+        {data: '{{ dia.data }}', energia: {{ dia.energia }}},
+      {% endfor %}
+    {% else %}
+      {data: 'Hoje', energia: {{ relatorio.energia_hoje or 0 }}}
+    {% endif %}
+  ];
+  
   new Chart(ctx, {
     type: 'line',
     data: {
-      labels: {{ labels|safe }},
+      labels: historicoDados.map(d => d.data),
       datasets: [{
-        label: 'Geração (kWh)',
-        data: {{ dados_geracao|safe }},
+        label: 'Energia Gerada (kWh)',
+        data: historicoDados.map(d => d.energia),
         borderColor: '#FE5800',
-        backgroundColor: 'rgba(254,88,0,0.08)',
+        backgroundColor: 'rgba(254,88,0,0.1)',
         tension: 0.4,
         fill: true,
-        pointRadius: 2
+        pointRadius: 6,
+        pointBackgroundColor: '#FE5800',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2
       }]
     },
     options: {
-      plugins: { legend: { display: false } },
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { 
+          display: true, 
+          labels: { 
+            color: '#ffffff',
+            font: { size: 14 }
+          } 
+        }
+      },
       scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true, grid: { color: '#eee' } }
+        x: { 
+          grid: { display: false },
+          ticks: { 
+            color: '#ffffff',
+            font: { size: 12 }
+          }
+        },
+        y: { 
+          beginAtZero: true, 
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
+            font: { size: 12 }
+          }
+        }
+      },
+      interaction: {
+        intersect: false,
+        mode: 'index'
       }
     }
   });

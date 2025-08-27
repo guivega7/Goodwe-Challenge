@@ -1,36 +1,146 @@
 {% extends "base.html" %}
-{% block title %}Início | SolarMind{% endblock %}
+{% block title %}SolarMind | Monitoramento Solar Inteligente{% endblock %}
 {% set active_page = 'home' %}
+
 {% block content %}
-<div class="text-center py-4">
-  <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SolarMind" style="height:64px; margin-bottom: 1rem;" />
-  <h1 class="fw-bold mb-3" style="color:#FE5800;">Bem-vindo ao SolarMind</h1>
-  <p class="lead mb-4" style="max-width:600px; margin:auto;">
-    Plataforma inteligente para monitoramento, análise e visualização de dados de energia solar, baseada na tecnologia GoodWe.
+<!-- Hero Section -->
+<div class="text-center py-5">
+  <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SolarMind" 
+       style="height:80px; margin-bottom: 2rem;" />
+  <h1 class="fw-bold mb-4" style="color:#FE5800; font-size: 3.5rem;">
+    Bem-vindo ao SolarMind
+  </h1>
+  <p class="lead mb-4 text-light" style="max-width:700px; margin:auto; font-size: 1.3rem;">
+    Plataforma inteligente para monitoramento, análise e controle completo de sistemas de energia solar GoodWe.
   </p>
-  <a href="{{ url_for('dash.dashboard') }}" class="btn btn-gw btn-lg px-4">Acessar Dashboard</a>
+  
+  <div class="d-flex justify-content-center gap-3 flex-wrap">
+    <a href="{{ url_for('dash.dashboard') }}" class="btn btn-gw btn-lg px-5 py-3">
+      <i class="fa-solid fa-chart-line me-2"></i>Acessar Dashboard
+    </a>
+    <a href="{{ url_for('estatisticas.estatisticas') }}" class="btn btn-outline-light btn-lg px-5 py-3">
+      <i class="fa-solid fa-chart-bar me-2"></i>Ver Estatísticas
+    </a>
+  </div>
 </div>
 
-<div class="row mt-5">
-  <div class="col-md-4 mb-4">
+<!-- Features Section -->
+<div class="row g-4 mt-5">
+  <div class="col-lg-4 col-md-6">
     <div class="glass p-4 h-100 text-center">
-      <i class="fa-solid fa-solar-panel fa-2x mb-3" style="color:#FE5800;"></i>
-      <h5 class="fw-semibold mb-2">Monitoramento em Tempo Real</h5>
-      <p class="mb-0">Acompanhe a geração de energia dos seus sistemas GoodWe com dados atualizados e gráficos intuitivos.</p>
+      <div class="mb-4">
+        <i class="fa-solid fa-solar-panel fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Monitoramento em Tempo Real</h5>
+      <p class="text-light mb-0">
+        Acompanhe a geração de energia, potência instantânea e status do seu sistema GoodWe 
+        com dados atualizados em tempo real e gráficos intuitivos.
+      </p>
     </div>
   </div>
-  <div class="col-md-4 mb-4">
+  
+  <div class="col-lg-4 col-md-6">
     <div class="glass p-4 h-100 text-center">
-      <i class="fa-solid fa-chart-line fa-2x mb-3" style="color:#FE5800;"></i>
-      <h5 class="fw-semibold mb-2">Estatísticas Avançadas</h5>
-      <p class="mb-0">Visualize históricos, tendências e comparativos para otimizar o desempenho das suas instalações.</p>
+      <div class="mb-4">
+        <i class="fa-solid fa-chart-line fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Estatísticas Avançadas</h5>
+      <p class="text-light mb-0">
+        Visualize históricos detalhados, tendências mensais e comparativos anuais 
+        para otimizar o desempenho das suas instalações solares.
+      </p>
     </div>
   </div>
-  <div class="col-md-4 mb-4">
+  
+  <div class="col-lg-4 col-md-6">
     <div class="glass p-4 h-100 text-center">
-      <i class="fa-solid fa-bolt fa-2x mb-3" style="color:#FE5800;"></i>
-      <h5 class="fw-semibold mb-2">Tecnologia GoodWe</h5>
-      <p class="mb-0">Integração total com inversores e soluções GoodWe, garantindo confiabilidade e inovação.</p>
+      <div class="mb-4">
+        <i class="fa-solid fa-microchip fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Controle de Aparelhos</h5>
+      <p class="text-light mb-0">
+        Gerencie o consumo dos seus dispositivos com sistema de prioridades 
+        e controle inteligente baseado na geração solar disponível.
+      </p>
+    </div>
+  </div>
+  
+  <div class="col-lg-4 col-md-6">
+    <div class="glass p-4 h-100 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-bolt fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Tecnologia GoodWe</h5>
+      <p class="text-light mb-0">
+        Integração total com inversores e soluções GoodWe SEMS Portal, 
+        garantindo confiabilidade, precisão e acesso aos dados oficiais.
+      </p>
+    </div>
+  </div>
+  
+  <div class="col-lg-4 col-md-6">
+    <div class="glass p-4 h-100 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-microphone fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Integração Alexa</h5>
+      <p class="text-light mb-0">
+        Receba alertas automáticos via Alexa para bateria baixa, falhas no sistema 
+        e outras situações importantes através do IFTTT.
+      </p>
+    </div>
+  </div>
+  
+  <div class="col-lg-4 col-md-6">
+    <div class="glass p-4 h-100 text-center">
+      <div class="mb-4">
+        <i class="fa-solid fa-shield-halved fa-4x" style="color:#FE5800;"></i>
+      </div>
+      <h5 class="fw-semibold mb-3" style="color:#FE5800;">Sistema Inteligente</h5>
+      <p class="text-light mb-0">
+        Validação automática de números de série, fallback para dados simulados 
+        e tratamento robusto de erros para máxima confiabilidade.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Stats Section -->
+<div class="glass mt-5 p-5">
+  <div class="text-center mb-4">
+    <h4 class="fw-bold" style="color:#FE5800;">
+      <i class="fa-solid fa-leaf me-2"></i>Contribuindo para um Futuro Sustentável
+    </h4>
+  </div>
+  
+  <div class="row text-center">
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-solar-panel fa-2x mb-2" style="color:#FE5800;"></i>
+        <h5 class="fw-bold">100%</h5>
+        <small class="text-light">Energia Limpa</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-leaf fa-2x mb-2" style="color:#28a745;"></i>
+        <h5 class="fw-bold">CO₂ Zero</h5>
+        <small class="text-light">Emissões Evitadas</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-money-bill-wave fa-2x mb-2" style="color:#ffc107;"></i>
+        <h5 class="fw-bold">Economia</h5>
+        <small class="text-light">Na Conta de Luz</small>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+      <div class="p-3">
+        <i class="fa-solid fa-clock fa-2x mb-2" style="color:#17a2b8;"></i>
+        <h5 class="fw-bold">24/7</h5>
+        <small class="text-light">Monitoramento</small>
+      </div>
     </div>
   </div>
 </div>
