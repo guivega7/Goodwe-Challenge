@@ -3,10 +3,12 @@ from models.usuario import Usuario
 from extensions import db
 from datetime import datetime, timedelta
 import calendar
+from .auth import login_required
 
 estatisticas_bp = Blueprint('estatisticas', __name__)
 
 @estatisticas_bp.route('/estatisticas', methods=['GET','POST'])
+@login_required
 def estatisticas():
     '''
     Função de Estatísticas.

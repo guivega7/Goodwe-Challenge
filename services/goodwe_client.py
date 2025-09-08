@@ -1,288 +1,472 @@
-import requests
+"""
+GoodWe SEMS Portal API Client.
+
+This module provides a client for communicating with the GoodWe SEMS Portal API
+to retrieve solar inverter data, energy generation metrics, and battery status.
+"""
+
 import base64
 import json
+import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple, Union
+
+import requests
+
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class GoodWeClient:
-    """Cliente para comunicação com a API do GoodWe SEMS Portal"""
+    """
+    Client for GoodWe SEMS Portal API communication.
     
-    BASE = {
+    Provides methods to authenticate and retrieve solar inverter data
+    including power generation, energy production, and battery status.
+    """
+    
+    BASE_URLS = {
         "us": "https://us.semsportal.com/api/",
         "eu": "https://eu.semsportal.com/api/",
     }
+    
+    API_VERSION = "v2.0.4"
+    CLIENT_TYPE = "web"
+    DEFAULT_LANGUAGE = "en"
+    REQUEST_TIMEOUT = 30
 
-    def __init__(self):
+    def __init__(self, region: str = "us"):
+        """
+        Initialize GoodWe API client.
+        
+        Args:
+            region: API region (us or eu)
+        """
+        self.region = region
         self.session = requests.Session()
-        # Manter verificação SSL ativa por segurança
         self.session.verify = True
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+        })
 
-    def _get_initial_token(self):
-        """Gera token inicial para primeira requisição"""
+    def _get_base_url(self) -> str:
+        """Get base URL for the configured region."""
+        return self.BASE_URLS.get(self.region, self.BASE_URLS["us"])
+
+    def _generate_initial_token(self) -> str:
+        """
+        Generate initial token for first API request.
+        
+        Returns:
+            str: Base64 encoded initial token
+        """
         timestamp = str(int(time.time() * 1000))
-
+        
         token_data = {
-            "version": "v2.0.4",
-            "client": "web",
-            "language": "en",
+            "version": self.API_VERSION,
+            "client": self.CLIENT_TYPE,
+            "language": self.DEFAULT_LANGUAGE,
             "timestamp": timestamp,
             "uid": "",
             "token": "",
         }
+        
         return base64.b64encode(json.dumps(token_data).encode()).decode()
 
-    def crosslogin(self, account, pwd, region="us"):
-        """Faz login na API e retorna token (token pós-login é base64(data))"""
-        url = f"{self.BASE.get(region, self.BASE['us'])}v2/Common/CrossLogin"
-
+    def crosslogin(self, account: str, password: str) -> Optional[str]:
+        """
+        Authenticate with GoodWe SEMS Portal.
+        
+        Args:
+            account: User account/email
+            password: User password
+            
+        Returns:
+            str: Authentication token if successful, None otherwise
+        """
+        url = f"{self._get_base_url()}v2/Common/CrossLogin"
         timestamp = str(int(time.time() * 1000))
-
+        
         headers = {
-            "Token": self._get_initial_token(),
+            "Token": self._generate_initial_token(),
             "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Origin": f"https://{region}.semsportal.com",
-            "Referer": f"https://{region}.semsportal.com/",
+            "Origin": f"https://{self.region}.semsportal.com",
+            "Referer": f"https://{self.region}.semsportal.com/",
         }
-
+        
         payload = {
             "account": account,
-            "pwd": pwd,
+            "pwd": password,
             "validCode": "",
             "is_local": True,
             "timestamp": timestamp,
             "agreement_agreement": True,
         }
-
+        
         try:
-            print("\n=== Requisição de Login ===")
-            print(f"URL: {url}")
-            print(f"Headers: {json.dumps(headers, indent=2)}")
-            print(f"Payload: {json.dumps(payload, indent=2)}")
-
-            response = self.session.post(url, json=payload, headers=headers, timeout=30)
-            print("\n=== Resposta ===")
-            print(f"Status: {response.status_code}")
-            print(f"Body: {response.text}")
-
+            logger.info(f"Attempting login to GoodWe SEMS Portal for account: {account}")
+            
+            response = self.session.post(
+                url, 
+                json=payload, 
+                headers=headers, 
+                timeout=self.REQUEST_TIMEOUT
+            )
+            
             if response.status_code == 200:
                 data = response.json()
-                # Se a resposta contém 'data', codifica como Base64 e define como Token
+                
                 if data.get("data"):
                     try:
-                        token_post = base64.b64encode(json.dumps(data.get("data")).encode()).decode()
-                        self.session.headers.update({"Token": token_post})
-                        print("\n✅ Login bem-sucedido (token_post definido).")
-                        return token_post
+                        token = base64.b64encode(
+                            json.dumps(data.get("data")).encode()
+                        ).decode()
+                        self.session.headers.update({"Token": token})
+                        logger.info("Successfully authenticated with GoodWe SEMS Portal")
+                        return token
                     except Exception as e:
-                        print("Não foi possível codificar token pós-login:", str(e))
+                        logger.error(f"Failed to encode authentication token: {e}")
                         return None
-
-                # fallback: estrutura antiga com data.token
-                if data.get("code") == 10000 and isinstance(data.get("data"), dict):
+                
+                # Fallback for legacy token format
+                if (data.get("code") == 10000 and 
+                    isinstance(data.get("data"), dict)):
                     token_data = data.get("data", {})
                     if token_data.get("token"):
-                        token_fallback = token_data.get("token")
-                        self.session.headers.update({"Token": token_fallback})
-                        print("\n✅ Login bem-sucedido (token fallback).")
-                        return token_fallback
-
-                print(f"\n❌ Login falhou ou formato inesperado: {data.get('msg')} (Código: {data.get('code')})")
+                        token = token_data.get("token")
+                        self.session.headers.update({"Token": token})
+                        logger.info("Successfully authenticated (legacy format)")
+                        return token
+                
+                logger.error(f"Login failed: {data.get('msg')} (Code: {data.get('code')})")
+            else:
+                logger.error(f"Login request failed with status: {response.status_code}")
+                
             return None
-
+            
+        except requests.RequestException as e:
+            logger.error(f"Network error during login: {e}")
+            return None
         except Exception as e:
-            print(f"\n❌ Erro: {str(e)}")
+            logger.error(f"Unexpected error during login: {e}")
             return None
 
-    def get_inverter_data_by_column(self, token, inv_id, column, date, region="eu"):
-        """Busca dados do inversor para uma coluna específica"""
-        base = self.BASE.get(region, self.BASE["eu"])
-        url = f"{base}PowerStationMonitor/GetInverterDataByColumn"
-
+    def get_inverter_data_by_column(
+        self, 
+        token: str, 
+        inverter_id: str, 
+        column: str, 
+        date: str
+    ) -> Optional[Dict]:
+        """
+        Retrieve inverter data for a specific column.
+        
+        Args:
+            token: Authentication token
+            inverter_id: Inverter identifier
+            column: Data column name (e.g., 'Pac', 'Eday', 'Cbattery1')
+            date: Date string in YYYY-MM-DD format
+            
+        Returns:
+            dict: API response data or None if failed
+        """
+        url = f"{self._get_base_url()}PowerStationMonitor/GetInverterDataByColumn"
+        
         headers = {
             "Token": token,
             "Content-Type": "application/json",
         }
-
-        payload = {"id": inv_id, "date": date, "column": column}
-
+        
+        payload = {
+            "id": inverter_id, 
+            "date": date, 
+            "column": column
+        }
+        
         try:
-            response = self.session.post(url, json=payload, headers=headers, timeout=30)
-            print(f"POST {url} payload={payload} status={response.status_code}")
-            text = response.text
-            if len(text) > 2000:
-                print(text[:2000] + "...")
-            else:
-                print(text)
+            logger.debug(f"Requesting inverter data: {column} for {date}")
+            
+            response = self.session.post(
+                url, 
+                json=payload, 
+                headers=headers, 
+                timeout=self.REQUEST_TIMEOUT
+            )
+            
             if response.status_code == 200:
                 try:
                     return response.json()
-                except Exception:
-                    return response.text
+                except json.JSONDecodeError:
+                    logger.warning("Invalid JSON response from inverter data API")
+                    return None
+            else:
+                logger.error(f"Inverter data request failed: {response.status_code}")
+                return None
+                
+        except requests.RequestException as e:
+            logger.error(f"Network error retrieving inverter data: {e}")
             return None
         except Exception as e:
-            print(f"❌ Erro nos dados: {str(e)}")
+            logger.error(f"Unexpected error retrieving inverter data: {e}")
             return None
 
-    def _parse_series_from_column_response(self, resp):
-        """Extrai uma lista de pares (datetime, valor) das respostas comuns do SEMS."""
-        if not resp:
+    def _parse_time_series_data(self, response_data: Dict) -> Optional[List[Tuple]]:
+        """
+        Parse time series data from API response.
+        
+        Args:
+            response_data: Raw API response data
+            
+        Returns:
+            list: List of (datetime, value) tuples or None if parsing failed
+        """
+        if not response_data:
             return None
-
-        data = resp if not isinstance(resp, dict) else (resp.get("data") or resp)
-
+            
+        data = (response_data if not isinstance(response_data, dict) 
+                else response_data.get("data", response_data))
+        
+        # Find the data list
         candidate_list = None
         if isinstance(data, dict):
-            for k, v in data.items():
-                if isinstance(v, list):
-                    candidate_list = v
+            for value in data.values():
+                if isinstance(value, list):
+                    candidate_list = value
                     break
         elif isinstance(data, list):
             candidate_list = data
-
+            
         if not candidate_list:
             return None
-
+            
         series = []
+        time_fields = ("date", "time", "collectTime", "timestamp")
+        value_fields = ("column", "value", "val", "v")
+        
         for item in candidate_list:
             if not isinstance(item, dict):
                 continue
-
-            # find time
-            t = None
-            for tk in ("date", "time", "collectTime", "timestamp"):
-                if tk in item:
-                    t = item.get(tk)
+                
+            # Extract time
+            timestamp = None
+            for field in time_fields:
+                if field in item:
+                    timestamp = item[field]
                     break
-            if t is None:
-                for k in item.keys():
-                    if "time" in k.lower() or "date" in k.lower():
-                        t = item.get(k)
+                    
+            if timestamp is None:
+                # Look for any field containing 'time' or 'date'
+                for key in item.keys():
+                    if 'time' in key.lower() or 'date' in key.lower():
+                        timestamp = item[key]
                         break
-
-            # find value
-            v = None
-            for vk in ("column", "value", "val", "v"):
-                if vk in item:
-                    v = item.get(vk)
+                        
+            # Extract value
+            value = None
+            for field in value_fields:
+                if field in item:
+                    value = item[field]
                     break
-            if v is None:
-                for k, val in item.items():
-                    if k in ("date", "time", "collectTime", "timestamp"):
-                        continue
-                    if isinstance(val, (int, float)):
-                        v = val
+                    
+            if value is None:
+                # Look for numeric values
+                for key, val in item.items():
+                    if key not in time_fields and isinstance(val, (int, float)):
+                        value = val
                         break
+                        
+            # Parse timestamp
+            parsed_time = self._parse_timestamp(timestamp)
+            if parsed_time:
+                series.append((parsed_time, value))
+                
+        return series if series else None
 
-            # parse time
-            dt = None
-            if isinstance(t, (int, float)):
+    def _parse_timestamp(self, timestamp: Union[str, int, float]) -> Optional[datetime]:
+        """
+        Parse various timestamp formats.
+        
+        Args:
+            timestamp: Timestamp in various formats
+            
+        Returns:
+            datetime: Parsed datetime object or None
+        """
+        if isinstance(timestamp, (int, float)):
+            try:
+                return datetime.fromtimestamp(float(timestamp))
+            except (ValueError, OSError):
+                return None
+                
+        if isinstance(timestamp, str):
+            formats = [
+                "%Y-%m-%d %H:%M:%S",
+                "%d/%m/%Y %H:%M:%S", 
+                "%Y-%m-%d",
+                "%d/%m/%Y"
+            ]
+            
+            for fmt in formats:
                 try:
-                    dt = datetime.fromtimestamp(float(t))
-                except Exception:
-                    dt = None
-            elif isinstance(t, str):
-                for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"):
-                    try:
-                        dt = datetime.strptime(t, fmt)
-                        break
-                    except Exception:
-                        continue
+                    return datetime.strptime(timestamp, fmt)
+                except ValueError:
+                    continue
+                    
+        return None
 
-            series.append((dt, v))
-
-        return series
-
-    def get_columns_series(self, token, inv_id, columns, date, region="eu", allow_mock=True):
-        """Busca múltiplas colunas e retorna um dict coluna->series(datetime,valor)"""
-        out = {}
-        has_real_data = False
+    def get_multiple_columns_data(
+        self, 
+        token: str, 
+        inverter_id: str, 
+        columns: List[str], 
+        date: str,
+        use_mock_data: bool = False
+    ) -> Dict[str, List[Tuple]]:
+        """
+        Retrieve data for multiple columns.
+        
+        Args:
+            token: Authentication token
+            inverter_id: Inverter identifier
+            columns: List of column names to retrieve
+            date: Date string in YYYY-MM-DD format
+            use_mock_data: Whether to generate mock data on API failure
+            
+        Returns:
+            dict: Column name mapped to time series data
+        """
+        results = {}
         error_details = {}
+        has_real_data = False
         
-        for col in columns:
-            resp = self.get_inverter_data_by_column(token, inv_id, col, date, region=region)
-            ser = self._parse_series_from_column_response(resp)
+        for column in columns:
+            logger.debug(f"Fetching data for column: {column}")
             
-            # Verifica que tipo de erro obtivemos
-            if isinstance(resp, dict) and resp.get('msg'):
-                error_details[col] = resp.get('msg', 'Erro desconhecido')
+            response = self.get_inverter_data_by_column(
+                token, inverter_id, column, date
+            )
             
-            # Verifica se obtivemos dados reais
-            if ser and not (isinstance(resp, dict) and resp.get('hasError')):
-                has_real_data = True
-                out[col] = ser
+            if response and not response.get('hasError'):
+                series = self._parse_time_series_data(response)
+                if series:
+                    results[column] = series
+                    has_real_data = True
+                    continue
+                    
+            # Handle API errors
+            if isinstance(response, dict) and response.get('msg'):
+                error_details[column] = response.get('msg', 'Unknown error')
+                
+            # Generate mock data if requested and real data failed
+            if use_mock_data:
+                logger.warning(f"Using mock data for column: {column}")
+                mock_series = self._generate_mock_time_series(column, date)
+                results[column] = mock_series
             else:
-                # Se allow_mock é False, não gera dados fictícios
-                if not allow_mock:
-                    print(f"❌ Nenhum dado real encontrado para {col} no inversor {inv_id}")
-                    if isinstance(resp, dict) and resp.get('msg'):
-                        print(f"   Erro: {resp.get('msg')}")
-                    out[col] = []
-                else:
-                    print(f"⚠️  Chamada SEMS real falhou para {col}, gerando dados fictícios para desenvolvimento...")
-                    ser = self._generate_mock_series(col, date)
-                    out[col] = ser
-        
-        # Armazena detalhes do erro na saída para melhor tratamento
-        if error_details and not allow_mock:
-            out['_error_details'] = error_details
+                logger.error(f"No valid data found for column: {column}")
+                results[column] = []
+                
+        # Include error details for debugging
+        if error_details:
+            results['_error_details'] = error_details
             
-        # Se nenhum dado real foi encontrado e não permitimos fictícios, retorna dict vazio
-        if not has_real_data and not allow_mock:
-            print(f"❌ Nenhum dado válido encontrado para o inversor {inv_id}")
-            return out  # Retorna com detalhes do erro
+        if not has_real_data and not use_mock_data:
+            logger.warning(f"No real data available for inverter: {inverter_id}")
             
-        return out
-    
-    def _generate_mock_series(self, column, date_str):
-        """Gera séries temporais fictícias realistas para desenvolvimento/teste"""
-        from datetime import datetime, timedelta
-        import random
+        return results
+
+    def _generate_mock_time_series(self, column: str, date_str: str) -> List[Tuple]:
+        """
+        Generate realistic mock time series data for development.
         
+        Args:
+            column: Column name for appropriate data pattern
+            date_str: Date string in YYYY-MM-DD format
+            
+        Returns:
+            list: Mock time series data as (datetime, value) tuples
+        """
         try:
             base_date = datetime.strptime(date_str, '%Y-%m-%d')
-        except:
+        except ValueError:
             base_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        
+            
         series = []
         
-        if column == 'Pac':  # Potência (kW) - padrão de geração solar
+        if column == 'Pac':  # Power generation (kW)
             for hour in range(24):
                 dt = base_date + timedelta(hours=hour)
-                if 6 <= hour <= 18:  # Horas de luz do dia
-                    # Simula curva solar: baixa no nascer/pôr do sol, pico ao meio-dia
-                    solar_factor = abs(12 - hour) / 6.0  # 0 ao meio-dia, 1 às 6h/18h
-                    power = round(max(0, 5.5 - (solar_factor * 4.5) + random.uniform(-0.5, 0.5)), 2)
+                if 6 <= hour <= 18:  # Daylight hours
+                    # Solar curve: low at sunrise/sunset, peak at noon
+                    solar_factor = abs(12 - hour) / 6.0
+                    power = max(0, 5.5 - (solar_factor * 4.5) + random.uniform(-0.5, 0.5))
+                    power = round(power, 2)
                 else:
                     power = 0.0
                 series.append((dt, power))
                 
-        elif column == 'Eday':  # Energia hoje (kWh) - cumulativo
+        elif column == 'Eday':  # Daily energy (kWh) - cumulative
             energy = 0.0
             for hour in range(24):
                 dt = base_date + timedelta(hours=hour)
                 if 6 <= hour <= 18:
-                    energy += random.uniform(0.3, 1.2)  # Adiciona energia durante o dia
+                    energy += random.uniform(0.3, 1.2)
                 series.append((dt, round(energy, 2)))
                 
-        elif column == 'Cbattery1':  # SOC da bateria (%) - padrão de carga/descarga
-            soc = 80.0  # Inicia em 80%
+        elif column == 'Cbattery1':  # Battery SOC (%)
+            soc = 80.0  # Start at 80%
             for hour in range(24):
                 dt = base_date + timedelta(hours=hour)
-                if 8 <= hour <= 16:  # Carregamento durante horas solares
+                if 8 <= hour <= 16:  # Charging during solar hours
                     soc = min(100.0, soc + random.uniform(0.5, 2.0))
-                elif 18 <= hour <= 23:  # Descarregamento à noite
+                elif 18 <= hour <= 23:  # Discharging at night
                     soc = max(20.0, soc - random.uniform(1.0, 3.0))
                 series.append((dt, round(soc, 1)))
                 
-        else:  # Coluna genérica - valores aleatórios pequenos
+        else:  # Generic column - random values
             for hour in range(24):
                 dt = base_date + timedelta(hours=hour)
                 value = round(random.uniform(10, 50), 2)
                 series.append((dt, value))
-        
+                
         return series
+
+    def get_station_list(self, token: str) -> Optional[List[Dict]]:
+        """
+        Get list of power stations for authenticated user.
+        
+        Args:
+            token: Authentication token
+            
+        Returns:
+            list: List of power station information
+        """
+        url = f"{self._get_base_url()}PowerStation/GetMonitorDetailByPowerstationId"
+        
+        headers = {
+            "Token": token,
+            "Content-Type": "application/json",
+        }
+        
+        try:
+            response = self.session.post(
+                url, 
+                headers=headers, 
+                timeout=self.REQUEST_TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('data', [])
+            else:
+                logger.error(f"Failed to get station list: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting station list: {e}")
+            return None

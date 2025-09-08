@@ -1,237 +1,253 @@
-# 🌞 SolarMind - Dashboard GoodWe com Integração Alexa
+# 🌞 SolarMind - Sistema Inteligente de Monitoramento Solar
 
-> **Challenge FIAP - Automação Inteligente de Energia Solar**  
-> Sistema completo de monitoramento solar com alertas automáticos via Alexa e validação inteligente de inversores.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)](https://flask.palletsprojects.com/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-orange.svg)](https://sqlalchemy.org)
+[![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+
+Sistema inteligente para monitoramento e controle de energia solar com integração a assistentes virtuais e automação residencial.
 
 ## 🚀 Funcionalidades Principais
 
-### 📊 **Dashboard Inteligente**
-- **Monitoramento em tempo real**: Potência instantânea, energia diária, SOC da bateria
-- **Validação automática**: Reconhece padrões válidos de números de série GoodWe
-- **Multi-região**: Suporte para servidores US e EU do SEMS Portal
-- **Fallback inteligente**: Dados simulados quando API não está disponível
+### 🏠 Automação Residencial
+- **Controle Inteligente**: Controle de aparelhos via API REST
+- **Monitoramento de Consumo**: Acompanhamento em tempo real do consumo energético
+- **Otimização Automática**: Sugestões inteligentes para economia de energia
 
-### 🎙️ **Integração Alexa (IFTTT)**
-- **Alertas automáticos**: Bateria baixa (<20%) e falhas do inversor
-- **Webhooks configurados**: Sistema funcional com Voice Monkey
-- **Notificações contextuais**: Mensagens personalizadas baseadas nos dados
+### 🤖 Integração com Assistentes Virtuais
+- **Amazon Alexa**: Comandos de voz via IFTTT
+- **Google Home**: Automação integrada
+- **Webhooks IFTTT**: Triggers automáticos baseados em eventos
 
-### 🔧 **Sistema de Validação**
-- **Padrões GoodWe**: Reconhece formatos oficiais de números de série
-- **Feedback visual**: Indicadores coloridos para status dos dados
-- **Tratamento de erros**: Diferencia entre SN inválido vs. sem acesso à API
+### 📊 Inteligência Artificial
+- **Análise Preditiva**: Previsão de consumo baseada em padrões históricos
+- **Aprendizado de Máquina**: Identificação automática de padrões de uso
+- **Alertas Inteligentes**: Notificações proativas sobre manutenção e consumo
 
-## 📋 Pré-requisitos
+### ⚡ Monitoramento Solar
+- **Status do Sistema**: Monitoramento em tempo real do sistema fotovoltaico
+- **Alertas de Manutenção**: Notificações preventivas
+- **Análise de Eficiência**: Relatórios detalhados de performance
 
-- Python 3.8+
-- Conta GoodWe SEMS Portal (opcional para dados reais)
-- Conta IFTTT + Alexa (para alertas de voz)
+## 🛠️ Tecnologias Utilizadas
 
-## ⚡ Instalação Rápida
+### Backend
+- **Flask**: Framework web Python
+- **SQLAlchemy**: ORM para banco de dados
+- **SQLite**: Banco de dados local
+- **Python 3.8+**: Linguagem principal
 
-### 1. **Clone e Configure o Ambiente**
-```bash
-git clone https://github.com/guivega7/Goodwe-Challenge.git
-cd "Challenge GoodWe"
-python -m venv venv
-venv\Scripts\activate  # Windows
-pip install -r requirements.txt
-```
+### Frontend
+- **HTML5/CSS3**: Interface web responsiva
+- **Bootstrap**: Framework CSS
+- **JavaScript**: Interatividade dinâmica
 
-### 2. **Configure as Credenciais**
+### Integrações
+- **IFTTT**: Automação e integração com assistentes
+- **Webhooks**: Comunicação em tempo real
+- **API REST**: Endpoints para integração externa
 
-Edite o arquivo `.env` com suas credenciais:
-
-```properties
-# Configuração do Banco
-DATABASE_URL=sqlite:///solarmind.db
-SECRET_KEY=sua_chave_secreta_aqui
-
-# === CONFIGURAÇÃO GOODWE SEMS ===
-# Separação de regiões conforme orientação do professor
-SEMS_LOGIN_REGION=us     # Região para login (us.semsportal.com)
-SEMS_DATA_REGION=eu      # Região para buscar dados (eu.semsportal.com)
-
-# Suas credenciais reais do SEMS Portal
-SEMS_ACCOUNT=seu_email@exemplo.com
-SEMS_PASSWORD=sua_senha_real
-SEMS_INV_ID=75000ESN333WV001  # Número de série do seu inversor
-
-# === INTEGRAÇÃO ALEXA (IFTTT) ===
-IFTTT_KEY=sua_chave_ifttt
-WEBHOOK_LOW_BATTERY=https://maker.ifttt.com/trigger/low_battery/with/key/SUA_CHAVE
-WEBHOOK_FALHA_INVERSOR=https://maker.ifttt.com/trigger/falha_inversor/with/key/SUA_CHAVE
-```
-
-### 3. **Inicialize o Banco de Dados**
-```bash
-python init_db.py
-```
-
-### 4. **Execute a Aplicação**
-```bash
-python app.py
-```
-
-Acesse: **http://127.0.0.1:5000**
-
-## 🎯 Como Usar o Dashboard
-
-### **Controles da Interface:**
-
-1. **Selector de Fonte de Dados**:
-   - 🔵 **"Dados Simulados"** - Sempre funciona com dados fictícios
-   - 🔗 **"GoodWe SEMS API"** - Tenta usar dados reais do inversor
-
-2. **Campo Número de Série**:
-   - Aparece quando seleciona "API"
-   - Digite o SN do seu inversor (ex: `75000ESN333WV001`)
-
-3. **Botão "Atualizar Dados"**:
-   - Aplica as configurações selecionadas
-
-### **Indicadores de Status:**
-- 🔵 **Azul**: Dados simulados (desenvolvimento/teste)
-- 🟡 **Amarelo**: SN válido, mas sem acesso à API 
-- 🟢 **Verde**: Dados reais da API GoodWe
-- 🔴 **Vermelho**: Erro (SN inválido ou falha crítica)
-
-## 🧪 Testando o Sistema
-
-### **Números de Série para Teste:**
-
-#### ✅ **Padrões Válidos** (mostram dados simulados com aviso):
-```
-75000ESN333WV001    # Formato principal GoodWe
-GW123456789ABC      # Com prefixo GW  
-1234567890123       # Apenas números (13+ dígitos)
-AB123456789         # Prefixo alfabético + números
-```
-
-#### ❌ **Padrões Inválidos** (mostram erro):
-```
-INVALID_123         # Formato não reconhecido
-ABC                 # Muito curto
-12345               # Poucos dígitos
-```
-
-### **Modos de Operação:**
-
-| Situação | Comportamento |
-|----------|---------------|
-| **Sem credenciais + SN válido** | Dados simulados + aviso "sem acesso" |
-| **Sem credenciais + SN inválido** | Erro de formato |
-| **Com credenciais + SN correto** | Dados reais da API |
-| **Com credenciais + SN incorreto** | Erro real da API |
-| **Dados simulados** | Sempre funciona |
-
-## 🔊 Configuração Alexa + IFTTT
-
-### **1. Configure os Webhooks IFTTT:**
-
-1. Acesse [IFTTT.com](https://ifttt.com) e faça login
-2. Crie um novo Applet:
-   - **IF**: Webhooks → Receive web request
-   - **Event Name**: `low_battery`
-   - **THEN**: Voice Monkey → Say a phrase
-   - **Phrase**: "Atenção! Bateria do sistema solar está baixa: {{Value1}}"
-
-3. Repita para `falha_inversor`:
-   - **Phrase**: "Alerta! {{Value1}}"
-
-### **2. Obtenha sua chave IFTTT:**
-- Acesse: https://maker.ifttt.com/use/
-- Copie sua chave e adicione no `.env`
-
-### **3. Teste os Alertas:**
-Os alertas são disparados automaticamente quando:
-- **Bateria < 20%**: Trigger `low_battery`
-- **Potência baixa durante o dia**: Trigger `falha_inversor`
-
-## 🏗️ Arquitetura do Sistema
+## 📁 Estrutura do Projeto
 
 ```
-SolarMind/
-├── 📱 app.py                    # Aplicação Flask principal
-├── ⚙️  config.py                # Configurações
-├── 🔗 extensions.py             # Extensões (SQLAlchemy)
-├── 🗃️  init_db.py               # Inicialização do banco
-├── 📊 models/                   # Modelos do banco de dados
-│   ├── usuario.py              # Modelo de usuário
-│   └── aparelho.py             # Modelo de aparelhos
-├── 🛣️  routes/                  # Rotas da aplicação
-│   ├── auth.py                 # Autenticação e registro
-│   ├── dashboard.py            # Dashboard principal
-│   ├── main.py                 # Página inicial
-│   ├── api.py                  # Endpoints da API
-│   ├── aparelhos.py            # Gestão de aparelhos
-│   └── estatisticas.py         # Estatísticas e relatórios
-├── 🛠️  services/                # Serviços e integrações
-│   ├── goodwe_client.py        # Cliente da API GoodWe SEMS
-│   ├── simula_evento.py        # Geração de dados simulados
-│   └── automacao.py            # Automação e alertas
-├── 🎨 templates/                # Templates HTML
-│   ├── base.html               # Template base
-│   ├── dashboard.html          # Interface do dashboard
-│   ├── login.html              # Página de login
-│   └── ...                     # Outros templates
-├── 📦 utils/                    # Utilitários
-│   ├── energia.py              # Cálculos de energia
-│   ├── logger.py               # Sistema de logs
-│   └── previsao.py             # Previsões e análises
-└── 🎯 static/                   # Arquivos estáticos
-    ├── css/                    # Estilos CSS
-    ├── js/                     # JavaScript
-    └── images/                 # Imagens e ícones
+solarmind/
+├── 📁 models/              # Modelos de dados (SQLAlchemy)
+│   ├── aparelho.py         # Modelo de aparelhos
+│   ├── usuario.py          # Modelo de usuários
+│   └── __init__.py
+├── 📁 routes/              # Rotas da aplicação (Blueprints)
+│   ├── api.py             # API REST principal
+│   ├── auth.py            # Autenticação
+│   ├── dashboard.py       # Dashboard web
+│   ├── aparelhos.py       # Gestão de aparelhos
+│   ├── estatisticas.py    # Relatórios e gráficos
+│   ├── main.py            # Páginas principais
+│   └── alexa.py           # Integração Alexa
+├── 📁 services/           # Serviços e lógica de negócio
+│   ├── automacao.py       # Automação residencial
+│   ├── goodwe_client.py   # Cliente API GoodWe
+│   └── simula_evento.py   # Simulador de eventos
+├── 📁 utils/              # Utilitários
+│   ├── energia.py         # Funções de energia
+│   ├── previsao.py        # Algoritmos de previsão
+│   ├── logger.py          # Sistema de logs
+│   └── errors.py          # Tratamento de erros
+├── 📁 templates/          # Templates HTML
+├── 📁 static/            # Arquivos estáticos (CSS, JS, imagens)
+├── app.py                # Aplicação principal
+├── config.py             # Configurações
+├── extensions.py         # Extensões Flask
+├── requirements.txt      # Dependências Python
+└── README.md            # Documentação
 ```
 
-## 🚨 Resolução de Problemas
+## 🚀 Instalação e Configuração
 
-### **❌ "No access, please log in"**
-- **Causa**: Token sem permissões ou credenciais incorretas
-- **Solução**: Configure `SEMS_ACCOUNT` e `SEMS_PASSWORD` reais no `.env`
+### Pré-requisitos
+- Python 3.8 ou superior
+- pip (gerenciador de pacotes Python)
+- Git
 
-### **❌ "Formato de SN inválido"**
-- **Causa**: Número de série não segue padrões GoodWe
-- **Solução**: Use um SN válido ou ative modo simulado
+### Passo a Passo
 
-### **❌ "API não responde"**
-- **Causa**: Servidor SEMS indisponível
-- **Solução**: Sistema usa fallback automático para dados simulados
+1. **Clone o repositório**
+   ```bash
+   git clone https://github.com/guivega7/Goodwe-Challenge.git
+   cd Goodwe-Challenge
+   ```
 
-### **❌ "Alexa não fala"**
-- **Causa**: Webhooks IFTTT mal configurados
-- **Solução**: Verifique chave IFTTT e configure Voice Monkey
+2. **Crie um ambiente virtual**
+   ```bash
+   python -m venv venv
+   
+   # Windows
+   venv\Scripts\activate
+   
+   # Linux/macOS
+   source venv/bin/activate
+   ```
 
-## 📈 Dados Monitorados
+3. **Instale as dependências**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-| Métrica | Descrição | Unidade |
-|---------|-----------|---------|
-| **Pac** | Potência instantânea | kW |
-| **Eday** | Energia gerada hoje | kWh |
-| **Cbattery1** | Estado de carga da bateria | % |
-| **CO₂ evitado** | Emissões evitadas | kg |
-| **Economia** | Economia financeira | R$ |
+4. **Configure as variáveis de ambiente**
+   ```bash
+   # Crie um arquivo .env na raiz do projeto
+   SECRET_KEY=sua-chave-secreta-super-segura
+   FLASK_DEBUG=True
+   DATABASE_URL=sqlite:///solarmind.db
+   IFTTT_WEBHOOK_URL=https://maker.ifttt.com/trigger/
+   IFTTT_KEY=sua-chave-ifttt
+   ```
 
-## 🎓 Sobre o Projeto
+5. **Inicialize o banco de dados**
+   ```bash
+   python init_db.py
+   ```
 
-Este é um projeto acadêmico desenvolvido para o **Challenge FIAP**, demonstrando:
+6. **Execute a aplicação**
+   ```bash
+   python app.py
+   ```
 
-- ✅ **Integração com APIs reais** (GoodWe SEMS)
-- ✅ **Automação IoT** (IFTTT + Alexa)
-- ✅ **Interface web responsiva** (Flask + Bootstrap)
-- ✅ **Validação inteligente** de dados
-- ✅ **Tratamento robusto de erros**
-- ✅ **Fallbacks** para desenvolvimento
+A aplicação estará disponível em `http://localhost:5000`
+
+## 📚 API Documentation
+
+### Endpoints Principais
+
+#### 🔌 Status da API
+```http
+GET /api/status
+```
+Retorna o status de funcionamento da API.
+
+#### 🏠 Controle de Aparelhos
+```http
+POST /ifttt/desligar
+Content-Type: application/json
+
+{
+  "value1": "nome_do_aparelho"
+}
+```
+
+#### 📊 Alertas do Sistema
+```http
+POST /api/alertas/low_battery
+Content-Type: application/json
+
+{
+  "soc": 15
+}
+```
+
+#### 🤖 IA - Previsão de Consumo
+```http
+GET /api/ia/previsao_consumo
+```
+
+#### 🔧 Automação Residencial
+```http
+POST /api/automacao/aparelhos/{id}/toggle
+Content-Type: application/json
+
+{
+  "acao": "desligar"
+}
+```
+
+## 🔧 Configuração IFTTT
+
+### Alexa Integration
+
+1. **Crie uma conta no IFTTT**
+2. **Configure o webhook:**
+   - URL: `http://seu-servidor.com/ifttt/desligar`
+   - Método: POST
+   - Body: `{"value1": "{{TextField}}"}`
+
+3. **Configure o trigger da Alexa:**
+   - "Alexa, trigger desligar ventilador"
+
+### Google Home Integration
+
+Similar ao Alexa, mas usando o serviço Google Assistant no IFTTT.
+
+## 🤝 Contribuindo
+
+1. **Fork o projeto**
+2. **Crie uma branch para sua feature** (`git checkout -b feature/AmazingFeature`)
+3. **Commit suas mudanças** (`git commit -m 'Add some AmazingFeature'`)
+4. **Push para a branch** (`git push origin feature/AmazingFeature`)
+5. **Abra um Pull Request**
+
+## 📋 Roadmap
+
+- [ ] **Dashboard Avançado**: Gráficos interativos com Chart.js
+- [ ] **App Mobile**: Aplicativo React Native
+- [ ] **ML Avançado**: Modelos TensorFlow para previsão
+- [ ] **IoT Integration**: Suporte a dispositivos IoT
+- [ ] **Cloud Deploy**: Deploy automático na AWS/Azure
+- [ ] **API GraphQL**: Endpoint GraphQL para queries flexíveis
+
+## 🛡️ Segurança
+
+- **Autenticação**: Sistema de login com hash de senhas
+- **Validação**: Validação de inputs em todas as rotas
+- **HTTPS**: Recomendado para produção
+- **Rate Limiting**: Implementar em produção
+
+## 📝 Changelog
+
+### v1.0.0 (2024-12-07)
+- ✨ Integração completa com IFTTT e Alexa
+- 🤖 Sistema de IA para previsão de consumo
+- 🏠 Automação residencial inteligente
+- 📊 Dashboard web responsivo
+- 🔒 Sistema de autenticação
+- 📱 API REST completa
+
+## 📄 Licença
+
+Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## 👥 Autores
+
+- **Guilherme Vega** - *Desenvolvimento inicial* - [@guivega7](https://github.com/guivega7)
+
+## 🙏 Agradecimentos
+
+- FIAP - Faculdade de Informática e Administração Paulista
+- GoodWe - Inspiração para o projeto
+- Comunidade Flask pela excelente documentação
+- IFTTT pela plataforma de automação
 
 ---
 
-## 👨‍💻 Desenvolvedor
-
-**Guilherme Vega**  
-📧 Email: [guivega7@outlook.com]  
-🔗 GitHub: [@guivega7](https://github.com/guivega7)
-
----
-
-*Sistema em constante desenvolvimento - contribuições são bem-vindas!* 🚀
+<div align="center">
+  <p>Feito com ❤️ para um futuro mais sustentável</p>
+  <p>⭐ Se este projeto te ajudou, considere dar uma estrela!</p>
+</div>

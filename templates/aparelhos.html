@@ -3,6 +3,59 @@
 {% block title %}Aparelhos{% endblock %}
 
 {% block content %}
+<style>
+    body {
+        color: white; /* Define o texto como branco */
+    }
+
+    .text-muted {
+        color: #d3d3d3 !important; /* Ajusta o texto secundário para um cinza claro */
+    }
+
+    .badge {
+        color: white !important; /* Garante que o texto dentro dos badges seja branco */
+    }
+
+    /* Garante que o modal tenha o maior z-index */
+    .modal {
+        z-index: 1050;
+    }
+
+    /* Remove o escurecimento e garante que o modal-backdrop não bloqueie eventos */
+    .modal-backdrop {
+        background-color: transparent !important;
+        pointer-events: none;
+    }
+
+    /* Permite rolagem no body quando o modal estiver aberto */
+    body.modal-open {
+        overflow-y: auto !important;
+    }
+
+    /* Garante que os campos do formulário sejam interativos */
+    .form-control,
+    .form-select {
+        pointer-events: auto;
+    }
+
+    /* Garante que os campos do modal sejam interativos */
+    .modal .form-control,
+    .modal .form-select {
+        pointer-events: auto;
+        z-index: 1051;
+        background-color: #fff;
+        color: #000;
+        border: 1px solid #ced4da;
+    }
+
+    /* Estilo para destacar os campos quando estão em foco */
+    .modal .form-control:focus,
+    .modal .form-select:focus {
+        border-color: #FE5800;
+        box-shadow: 0 0 0 0.2rem rgba(254, 88, 0, 0.25);
+        outline: none;
+    }
+</style>
 <main class="flex-grow-1 py-5 fade-in">
     <div class="container">
         <div class="glass text-center mb-5">
@@ -53,7 +106,7 @@
                 </button>
             </div>
 
-            {% if aparelhos %}
+            {% if aparelhos|length > 0 %}
             <div class="table-responsive">
                 <table class="table table-dark table-striped">
                     <thead>
@@ -73,17 +126,17 @@
                                 <div class="d-flex align-items-center">
                                     <i class="fas fa-plug me-2 text-warning"></i>
                                     <div>
-                                        <strong>{{ aparelho['nome'] }}</strong>
+                                        <strong>{{ aparelho.nome }}</strong>
                                         <br><small class="text-muted">Eletrônico</small>
                                     </div>
                                 </div>
                             </td>
                             <td>
-                                <span class="badge bg-info">{{ "%.2f"|format(aparelho['consumo']) }} kWh</span>
-                                <br><small class="text-muted">~R$ {{ "%.2f"|format(aparelho['consumo'] * 0.75) }}</small>
+                                <span class="badge bg-info">{{ "%.2f"|format(aparelho.consumo) }} kWh</span>
+                                <br><small class="text-muted">~R$ {{ "%.2f"|format(aparelho.consumo * 0.75) }}</small>
                             </td>
                             <td>
-                                {% if aparelho['status'] %}
+                                {% if aparelho.status %}
                                     <span class="badge bg-success">
                                         <i class="fas fa-check-circle me-1"></i>Ativo
                                     </span>
@@ -94,11 +147,11 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if aparelho['prioridade'] <= 2 %}
+                                {% if aparelho.prioridade <= 2 %}
                                     <span class="badge bg-danger">
                                         <i class="fas fa-exclamation-triangle me-1"></i>Alta
                                     </span>
-                                {% elif aparelho['prioridade'] == 3 %}
+                                {% elif aparelho.prioridade == 3 %}
                                     <span class="badge bg-warning">
                                         <i class="fas fa-minus-circle me-1"></i>Média
                                     </span>
@@ -108,33 +161,17 @@
                                     </span>
                                 {% endif %}
                             </td>
+                            <td>--</td>
                             <td>
-                                <small class="text-muted">
-                                    {% if aparelho['status'] %}
-                                        2h 15m
-                                    {% else %}
-                                        Desligado
-                                    {% endif %}
-                                </small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    {% if aparelho['status'] %}
-                                        <button class="btn btn-outline-warning" title="Desligar">
-                                            <i class="fas fa-power-off"></i>
-                                        </button>
-                                    {% else %}
-                                        <button class="btn btn-outline-success" title="Ligar">
-                                            <i class="fas fa-play"></i>
-                                        </button>
-                                    {% endif %}
-                                    <button class="btn btn-outline-info" title="Editar">
-                                        <i class="fas fa-edit"></i>
+                                <button class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#editDeviceModal" data-id="{{ aparelho.id }}">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <form action="/aparelhos/remover" method="POST" style="display: inline;">
+                                    <input type="hidden" name="id" value="{{ aparelho.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">
+                                        <i class="fas fa-trash"></i> Remover
                                     </button>
-                                    <button class="btn btn-outline-danger" title="Remover">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -142,186 +179,8 @@
                 </table>
             </div>
             {% else %}
-            <!-- Dados Mock quando não há aparelhos -->
-            <div class="table-responsive">
-                <table class="table table-dark table-striped">
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-tv me-2"></i>Aparelho</th>
-                            <th><i class="fas fa-bolt me-2"></i>Consumo (kWh)</th>
-                            <th><i class="fas fa-toggle-on me-2"></i>Status</th>
-                            <th><i class="fas fa-star me-2"></i>Prioridade</th>
-                            <th><i class="fas fa-clock me-2"></i>Tempo Ativo</th>
-                            <th><i class="fas fa-cogs me-2"></i>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-snowflake me-2 text-warning"></i>
-                                    <div>
-                                        <strong>Ar Condicionado</strong>
-                                        <br><small class="text-muted">Climatização</small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge bg-info">3.2 kWh</span>
-                                <br><small class="text-muted">~R$ 2.40</small>
-                            </td>
-                            <td>
-                                <span class="badge bg-success">
-                                    <i class="fas fa-check-circle me-1"></i>Ativo
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-danger">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Alta
-                                </span>
-                            </td>
-                            <td>
-                                <small class="text-muted">3h 20m</small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-warning" title="Desligar">
-                                        <i class="fas fa-power-off"></i>
-                                    </button>
-                                    <button class="btn btn-outline-info" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" title="Remover">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-tv me-2 text-warning"></i>
-                                    <div>
-                                        <strong>Smart TV 55"</strong>
-                                        <br><small class="text-muted">Entretenimento</small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge bg-info">0.15 kWh</span>
-                                <br><small class="text-muted">~R$ 0.11</small>
-                            </td>
-                            <td>
-                                <span class="badge bg-success">
-                                    <i class="fas fa-check-circle me-1"></i>Ativo
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-warning">
-                                    <i class="fas fa-minus-circle me-1"></i>Média
-                                </span>
-                            </td>
-                            <td>
-                                <small class="text-muted">5h 45m</small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-warning" title="Desligar">
-                                        <i class="fas fa-power-off"></i>
-                                    </button>
-                                    <button class="btn btn-outline-info" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" title="Remover">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-blender me-2 text-warning"></i>
-                                    <div>
-                                        <strong>Geladeira</strong>
-                                        <br><small class="text-muted">Eletrodoméstico</small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge bg-info">1.8 kWh</span>
-                                <br><small class="text-muted">~R$ 1.35</small>
-                            </td>
-                            <td>
-                                <span class="badge bg-success">
-                                    <i class="fas fa-check-circle me-1"></i>Ativo
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-danger">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Alta
-                                </span>
-                            </td>
-                            <td>
-                                <small class="text-muted">24h</small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-warning" title="Desligar">
-                                        <i class="fas fa-power-off"></i>
-                                    </button>
-                                    <button class="btn btn-outline-info" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" title="Remover">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <i class="fas fa-desktop me-2 text-warning"></i>
-                                    <div>
-                                        <strong>Computador</strong>
-                                        <br><small class="text-muted">Informática</small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge bg-info">0.45 kWh</span>
-                                <br><small class="text-muted">~R$ 0.34</small>
-                            </td>
-                            <td>
-                                <span class="badge bg-secondary">
-                                    <i class="fas fa-pause-circle me-1"></i>Inativo
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-success">
-                                    <i class="fas fa-check-circle me-1"></i>Baixa
-                                </span>
-                            </td>
-                            <td>
-                                <small class="text-muted">Desligado</small>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-success" title="Ligar">
-                                        <i class="fas fa-play"></i>
-                                    </button>
-                                    <button class="btn btn-outline-info" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" title="Remover">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="alert alert-warning text-center">
+                Nenhum aparelho cadastrado. Adicione um novo aparelho para começar.
             </div>
             {% endif %}
         </div>
@@ -373,15 +232,15 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form>
+                <form action="/aparelhos/adicionar" method="POST">
                     <div class="mb-3">
                         <label class="form-label text-white">Nome do Aparelho</label>
-                        <input type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Televisão da Sala">
+                        <input type="text" name="nome" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Televisão da Sala" required>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label text-white">Tipo</label>
-                            <select class="form-select bg-dark text-white border-secondary">
+                            <select class="form-select bg-dark text-white border-secondary" name="tipo">
                                 <option>Eletrodoméstico</option>
                                 <option>Climatização</option>
                                 <option>Entretenimento</option>
@@ -391,73 +250,153 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label text-white">Prioridade</label>
-                            <select class="form-select bg-dark text-white border-secondary">
-                                <option value="baixa">Baixa</option>
-                                <option value="media" selected>Média</option>
-                                <option value="alta">Alta</option>
+                            <select class="form-select bg-dark text-white border-secondary" name="prioridade">
+                                <option value="1">Alta</option>
+                                <option value="2">Média</option>
+                                <option value="3">Baixa</option>
                             </select>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label text-white">Consumo Estimado (kWh/dia)</label>
-                        <input type="number" step="0.01" class="form-control bg-dark text-white border-secondary" placeholder="0.00">
+                        <input type="number" name="consumo" step="0.01" class="form-control bg-dark text-white border-secondary" placeholder="0.00" required>
+                    </div>
+                    <div class="modal-footer border-secondary">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Adicionar Aparelho
+                        </button>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer border-secondary">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary">
-                    <i class="fas fa-save me-2"></i>Adicionar Aparelho
-                </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Aparelho -->
+<div class="modal fade" id="editDeviceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-edit me-2" style="color:#FE5800;"></i>Editar Aparelho
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form action="/aparelhos/editar" method="POST">
+                    <input type="hidden" name="id" id="editDeviceId">
+                    <div class="mb-3">
+                        <label class="form-label text-white">Nome do Aparelho</label>
+                        <input type="text" name="nome" id="editDeviceName" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Televisão da Sala" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-white">Tipo</label>
+                            <select class="form-select bg-dark text-white border-secondary" name="tipo" id="editDeviceType">
+                                <option>Eletrodoméstico</option>
+                                <option>Climatização</option>
+                                <option>Entretenimento</option>
+                                <option>Informática</option>
+                                <option>Iluminação</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-white">Prioridade</label>
+                            <select class="form-select bg-dark text-white border-secondary" name="prioridade" id="editDevicePriority">
+                                <option value="1">Alta</option>
+                                <option value="2">Média</option>
+                                <option value="3">Baixa</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Consumo Estimado (kWh/dia)</label>
+                        <input type="number" name="consumo" id="editDeviceConsumption" step="0.01" class="form-control bg-dark text-white border-secondary" placeholder="0.00" required>
+                    </div>
+                    <div class="modal-footer border-secondary">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>Salvar Alterações
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-// Gráfico de Consumo por Aparelho
-document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('consumoChart').getContext('2d');
-    
-    new Chart(ctx, {
+  document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('consumoChart');
+
+    if (!ctx) {
+      console.error('Elemento canvas para o gráfico não encontrado.');
+      return;
+    }
+
+    try {
+      const aparelhosData = JSON.parse(`{{ aparelhos_data|tojson|safe }}`);
+      console.log('Dados do gráfico:', aparelhosData);
+
+      if (!aparelhosData.labels || !aparelhosData.data || aparelhosData.labels.length === 0 || aparelhosData.data.length === 0) {
+        console.warn('Nenhum dado disponível para o gráfico.');
+        return;
+      }
+
+      new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
         data: {
-            labels: ['Ar Condicionado', 'Geladeira', 'Computador', 'Smart TV'],
-            datasets: [{
-                data: [3.2, 1.8, 0.45, 0.15],
-                backgroundColor: [
-                    '#FE5800',
-                    '#FF8C42',
-                    '#FFB284',
-                    '#FFD7C6'
-                ],
-                borderColor: '#1e1e1e',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        color: '#fff',
-                        padding: 20,
-                        usePointStyle: true
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const value = context.parsed;
-                            const cost = (value * 0.75).toFixed(2);
-                            return `${context.label}: ${value} kWh (R$ ${cost})`;
-                        }
-                    }
-                }
-            }
+          labels: aparelhosData.labels,
+          datasets: [{
+            data: aparelhosData.data,
+            backgroundColor: [
+              '#FE5800', '#FF8C42', '#FFB284', '#FFD9B3', '#FFEEDD'
+            ]
+          }]
         }
+      });
+    } catch (error) {
+      console.error('Erro ao renderizar o gráfico:', error);
+    }
+  });
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalElement = document.getElementById('addDeviceModal');
+    const modal = new bootstrap.Modal(modalElement);
+
+    modalElement.addEventListener('shown.bs.modal', function() {
+      modalElement.focus(); // Força o foco no modal
+      console.log('Modal aberto com sucesso e foco forçado.');
     });
-});
+
+    modalElement.addEventListener('hidden.bs.modal', function() {
+      console.log('Modal fechado com sucesso.');
+    });
+  });
+
+  // Preencher o modal de edição com os dados do aparelho
+  const editDeviceModal = document.getElementById('editDeviceModal');
+  editDeviceModal.addEventListener('show.bs.modal', function(event) {
+    const button = event.relatedTarget;
+    const deviceId = button.getAttribute('data-id');
+
+    // Aqui você deve buscar os dados do aparelho pelo ID via AJAX ou outra forma
+    // Para este exemplo, vamos preencher com dados estáticos
+    const deviceData = {
+      id: deviceId,
+      nome: 'Ar Condicionado',
+      tipo: 'Climatização',
+      prioridade: 1,
+      consumo: 3.2
+    };
+
+    // Preencher os campos do modal com os dados do aparelho
+    document.getElementById('editDeviceId').value = deviceData.id;
+    document.getElementById('editDeviceName').value = deviceData.nome;
+    document.getElementById('editDeviceType').value = deviceData.tipo;
+    document.getElementById('editDevicePriority').value = deviceData.prioridade;
+    document.getElementById('editDeviceConsumption').value = deviceData.consumo;
+  });
 </script>
 {% endblock %}

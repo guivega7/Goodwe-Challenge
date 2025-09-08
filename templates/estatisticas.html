@@ -45,7 +45,7 @@
   </div>
 </div>
 
-<!-- Gráficos -->
+<!-- Gráficos Aprimorados -->
 <div class="row g-4 mb-4">
   <div class="col-lg-6">
     <div class="glass p-4">
@@ -53,7 +53,9 @@
         <i class="fa-solid fa-chart-column fa-2x me-3" style="color:#FE5800;"></i>
         <h5 class="fw-semibold mb-0" style="color:#FE5800;">Geração Mensal</h5>
       </div>
-      <canvas id="graficoMensal" height="200"></canvas>
+      <div style="position: relative; height: 300px;">
+        <canvas id="graficoMensal"></canvas>
+      </div>
     </div>
   </div>
   <div class="col-lg-6">
@@ -62,7 +64,24 @@
         <i class="fa-solid fa-chart-area fa-2x me-3" style="color:#FE5800;"></i>
         <h5 class="fw-semibold mb-0" style="color:#FE5800;">Comparativo Anual</h5>
       </div>
-      <canvas id="graficoAnual" height="200"></canvas>
+      <div style="position: relative; height: 300px;">
+        <canvas id="graficoAnual"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gráfico de Tendência Semanal -->
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="glass p-4">
+      <div class="d-flex align-items-center mb-3">
+        <i class="fa-solid fa-chart-line fa-2x me-3" style="color:#FE5800;"></i>
+        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Tendência Semanal</h5>
+      </div>
+      <div style="position: relative; height: 300px;">
+        <canvas id="graficoSemanal"></canvas>
+      </div>
     </div>
   </div>
 </div>
@@ -114,6 +133,20 @@
           <td class="text-success">R$ 244,20</td>
           <td class="text-info">162.8 kg</td>
         </tr>
+        <tr>
+          <td>Abril 2025</td>
+          <td class="text-warning fw-bold">289.3 kWh</td>
+          <td>9.6 kWh/dia</td>
+          <td class="text-success">R$ 217,45</td>
+          <td class="text-info">144.7 kg</td>
+        </tr>
+        <tr>
+          <td>Março 2025</td>
+          <td class="text-warning fw-bold">342.1 kWh</td>
+          <td>11.0 kWh/dia</td>
+          <td class="text-success">R$ 256,80</td>
+          <td class="text-info">171.1 kg</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -121,49 +154,98 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Configuração dos gráficos
+  // Configuração comum dos gráficos
   const chartConfig = {
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: { 
       legend: { 
         display: true, 
-        labels: { color: '#ffffff' } 
+        labels: { 
+          color: '#ffffff',
+          font: { size: 14 }
+        } 
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: '#FE5800',
+        borderWidth: 1
       }
     },
     scales: {
       x: { 
-        grid: { display: false },
-        ticks: { color: '#ffffff' }
+        grid: { 
+          display: false 
+        },
+        ticks: { 
+          color: '#ffffff',
+          font: { size: 12 }
+        }
       },
       y: { 
         beginAtZero: true, 
-        grid: { color: 'rgba(255,255,255,0.1)' },
-        ticks: { color: '#ffffff' }
+        grid: { 
+          color: 'rgba(255,255,255,0.1)' 
+        },
+        ticks: { 
+          color: '#ffffff',
+          font: { size: 12 }
+        }
       }
-    },
-    responsive: true,
-    maintainAspectRatio: false
+    }
   };
 
   // Gráfico Mensal
   const ctxMensal = document.getElementById('graficoMensal').getContext('2d');
-  new Chart(ctxMensal, {
+  const graficoMensal = new Chart(ctxMensal, {
     type: 'bar',
     data: {
       labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
       datasets: [{
         label: 'Geração (kWh)',
-        data: [245, 278, 312, 289, 267, 234, 201, 256, 289, 298, 276, 312],
-        backgroundColor: 'rgba(254,88,0,0.8)',
+        data: [245, 278, 342, 289, 325, 278, 313, 285, 289, 298, 276, 312],
+        backgroundColor: [
+          'rgba(254,88,0,0.8)',
+          'rgba(254,88,0,0.7)',
+          'rgba(254,88,0,0.9)',
+          'rgba(254,88,0,0.7)',
+          'rgba(254,88,0,0.9)',
+          'rgba(254,88,0,0.7)',
+          'rgba(254,88,0,0.8)',
+          'rgba(254,88,0,0.8)',
+          'rgba(254,88,0,0.7)',
+          'rgba(254,88,0,0.8)',
+          'rgba(254,88,0,0.7)',
+          'rgba(254,88,0,0.8)'
+        ],
         borderColor: '#FE5800',
-        borderWidth: 1
+        borderWidth: 2,
+        borderRadius: 4,
+        borderSkipped: false
       }]
     },
-    options: chartConfig
+    options: {
+      ...chartConfig,
+      scales: {
+        ...chartConfig.scales,
+        y: {
+          ...chartConfig.scales.y,
+          ticks: {
+            ...chartConfig.scales.y.ticks,
+            callback: function(value) {
+              return value + ' kWh';
+            }
+          }
+        }
+      }
+    }
   });
 
   // Gráfico Anual
   const ctxAnual = document.getElementById('graficoAnual').getContext('2d');
-  new Chart(ctxAnual, {
+  const graficoAnual = new Chart(ctxAnual, {
     type: 'line',
     data: {
       labels: ['2021', '2022', '2023', '2024', '2025'],
@@ -174,11 +256,98 @@
         backgroundColor: 'rgba(254,88,0,0.1)',
         tension: 0.4,
         fill: true,
-        pointRadius: 6,
-        pointBackgroundColor: '#FE5800'
+        pointRadius: 8,
+        pointBackgroundColor: '#FE5800',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 3,
+        pointHoverRadius: 10,
+        pointHoverBackgroundColor: '#ffffff',
+        pointHoverBorderColor: '#FE5800',
+        pointHoverBorderWidth: 3
       }]
     },
-    options: chartConfig
+    options: {
+      ...chartConfig,
+      scales: {
+        ...chartConfig.scales,
+        y: {
+          ...chartConfig.scales.y,
+          ticks: {
+            ...chartConfig.scales.y.ticks,
+            callback: function(value) {
+              return value.toLocaleString() + ' kWh';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Gráfico Semanal (Novo)
+  const ctxSemanal = document.getElementById('graficoSemanal').getContext('2d');
+  const graficoSemanal = new Chart(ctxSemanal, {
+    type: 'line',
+    data: {
+      labels: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+      datasets: [
+        {
+          label: 'Semana Atual',
+          data: [12.5, 15.2, 18.7, 16.3, 19.1, 17.8, 14.2],
+          borderColor: '#FE5800',
+          backgroundColor: 'rgba(254,88,0,0.1)',
+          tension: 0.4,
+          fill: false,
+          pointRadius: 6,
+          pointBackgroundColor: '#FE5800',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2
+        },
+        {
+          label: 'Semana Anterior',
+          data: [11.8, 14.5, 17.2, 15.8, 18.3, 16.9, 13.7],
+          borderColor: '#28a745',
+          backgroundColor: 'rgba(40,167,69,0.1)',
+          tension: 0.4,
+          fill: false,
+          pointRadius: 4,
+          pointBackgroundColor: '#28a745',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          borderDash: [5, 5]
+        }
+      ]
+    },
+    options: {
+      ...chartConfig,
+      scales: {
+        ...chartConfig.scales,
+        y: {
+          ...chartConfig.scales.y,
+          ticks: {
+            ...chartConfig.scales.y.ticks,
+            callback: function(value) {
+              return value + ' kWh';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Função para redimensionar os gráficos
+  window.addEventListener('resize', function() {
+    graficoMensal.resize();
+    graficoAnual.resize();
+    graficoSemanal.resize();
+  });
+
+  // Animação ao carregar
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+      graficoMensal.update('active');
+      graficoAnual.update('active');
+      graficoSemanal.update('active');
+    }, 500);
   });
 </script>
 {% endblock %}

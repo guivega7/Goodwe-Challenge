@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session, flash, request
 from services.goodwe_client import GoodWeClient
 from services.simula_evento import get_mock_event, dispara_alerta
+from routes.auth import login_required
 from datetime import datetime
 import os
 import json
@@ -54,6 +55,7 @@ def _extract_latest_value(resp):
     return 0.0
 
 @dash_bp.route('/dashboard')
+@login_required
 def dashboard():
     """Rota principal do dashboard com integração GoodWe SEMS API"""
     
