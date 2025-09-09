@@ -7,6 +7,7 @@ session management, and user registration validation.
 
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask_login import login_user, logout_user, login_required as flask_login_required, current_user
 
 from models.usuario import Usuario
 from extensions import db
@@ -18,22 +19,8 @@ auth_bp = Blueprint('auth', __name__)
 
 
 def login_required(f):
-    """
-    Decorator to require login for protected routes.
-    
-    Args:
-        f: Function to be decorated
-        
-    Returns:
-        Decorated function that checks for authentication
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'usuario_id' not in session:
-            flash('Você precisa fazer login para acessar esta página.')
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+    """Compat: mantém mesmo nome usando Flask-Login internamente."""
+    return flask_login_required(f)
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -59,12 +46,10 @@ def login():
                 usuario = Usuario.query.filter_by(email=nome).first()
             
             if usuario and usuario.checar_senha(senha):
-                session['usuario_id'] = usuario.id
-                session['usuario_nome'] = usuario.nome
-                
+                # Flask-Login
+                login_user(usuario, remember=True)
                 logger.info(f"User '{nome}' logged in successfully")
                 flash(f'Bem-vindo, {usuario.nome}!')
-                
                 return redirect(url_for('dash.dashboard'))
             else:
                 logger.warning(f"Failed login attempt for user '{nome}'")
@@ -150,9 +135,9 @@ def logout():
     Returns:
         str: Redirect response to home page
     """
-    user_name = session.get('usuario_nome', 'Unknown')
+    user_name = getattr(current_user, 'nome', session.get('usuario_nome', 'Unknown'))
+    logout_user()
     session.clear()
-    
     logger.info(f"User '{user_name}' logged out")
     flash('Logout realizado com sucesso.')
     

@@ -21,6 +21,7 @@ from utils.energia import dispara_alerta, dispara_alerta_economia
 from services.energy_autopilot import build_daily_plan
 from utils.logger import get_logger
 from routes.auth import login_required
+from services.scheduler import get_jobs_info
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,19 @@ def status():
         'msg': 'API SolarMind funcionando',
         'timestamp': datetime.now().isoformat()
     })
+
+
+@api_bp.route('/api/scheduler/health')
+def scheduler_health():
+    try:
+        jobs = get_jobs_info()
+        return jsonify({
+            'scheduler': 'ok' if jobs is not None else 'disabled',
+            'jobs': jobs,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'scheduler': 'error', 'error': str(e)}), 500
 
 
 # ========== INTEGRAÇÃO COM ASSISTENTES INTELIGENTES ==========

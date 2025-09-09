@@ -6,10 +6,11 @@ incluindo autenticação e relacionamentos.
 """
 
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
 from extensions import db
 
 
-class Usuario(db.Model):
+class Usuario(UserMixin, db.Model):
     """
     Modelo para usuários do sistema SolarMind.
     

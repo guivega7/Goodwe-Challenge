@@ -17,6 +17,9 @@ from flask import Flask
 from dotenv import load_dotenv
 
 from extensions import db
+from services.scheduler import init_scheduler
+from flask_login import LoginManager
+from models.usuario import Usuario
 
 
 def create_app():
@@ -41,6 +44,17 @@ def create_app():
     
     # Inicializa extensões
     db.init_app(app)
+    # Flask-Login
+    login_manager = LoginManager()
+    login_manager.login_view = 'auth.login'
+    login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        try:
+            return Usuario.query.get(int(user_id))
+        except Exception:
+            return None
     
     # Importa e registra blueprints
     from routes.api import api_bp
@@ -58,6 +72,10 @@ def create_app():
     app.register_blueprint(aparelhos_bp)
     app.register_blueprint(estatisticas_bp)
     app.register_blueprint(alexa_bp)
+
+    # Inicializa Scheduler (APScheduler)
+    with app.app_context():
+        init_scheduler(app)
     
     return app
 
