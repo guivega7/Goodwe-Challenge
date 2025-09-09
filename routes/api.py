@@ -10,6 +10,7 @@ Este módulo contém todos os endpoints da API REST para:
 """
 
 import random
+import os
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 
@@ -17,6 +18,10 @@ from extensions import db
 from models.aparelho import Aparelho
 from models.usuario import Usuario
 from utils.energia import dispara_alerta, dispara_alerta_economia
+from services.energy_autopilot import build_daily_plan
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 api_bp = Blueprint('api', __name__)
 
@@ -99,6 +104,202 @@ def aciona_alexa():
     Retorna:
         JSON: Status da operação e detalhes do evento
     """
+    try:
+        data = request.get_json()
+        evento = data.get('evento')
+        mensagem = data.get('mensagem', 'Evento Alexa disparado')
+        
+        # Simula resposta da Alexa
+        resposta = {
+            'status': 'sucesso',
+            'evento': evento,
+            'mensagem': mensagem,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        logger.info(f"Evento Alexa disparado: {evento} - {mensagem}")
+        return jsonify(resposta)
+        
+    except Exception as e:
+        logger.error(f"Erro no endpoint Alexa: {str(e)}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro interno: {str(e)}'
+        }), 500
+
+
+@api_bp.route('/api/test/low-battery', methods=['POST'])
+def test_low_battery():
+    """
+    Endpoint de teste para simular evento de bateria baixa.
+    
+    Parâmetros esperados (opcionais):
+        battery_level (int): Nível da bateria (default: 15%)
+        location (str): Local do sistema (default: "Sistema SolarMind")
+        
+    Retorna:
+        JSON: Status da operação e webhooks disparados
+    """
+    try:
+        data = request.get_json() or {}
+        battery_level = data.get('battery_level', 15)
+        location = data.get('location', 'Sistema SolarMind')
+        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+        
+        # Monta payload para IFTTT
+        webhook_data = {
+            'value1': location,
+            'value2': f'{battery_level}%',
+            'value3': timestamp
+        }
+        
+        # Dispara webhook IFTTT de bateria baixa
+        webhook_url = os.environ.get('WEBHOOK_LOW_BATTERY')
+        if webhook_url:
+            import requests
+            response = requests.post(webhook_url, json=webhook_data)
+            webhook_success = response.status_code == 200
+        else:
+            webhook_success = False
+            
+        # Log do evento
+        logger.warning(f"🔋 BATERIA BAIXA: {location} - {battery_level}% às {timestamp}")
+        
+        return jsonify({
+            'status': 'sucesso',
+            'evento': 'low_battery',
+            'dados': {
+                'local': location,
+                'nivel_bateria': f'{battery_level}%',
+                'timestamp': timestamp,
+                'webhook_enviado': webhook_success,
+                'webhook_url': webhook_url is not None
+            },
+            'mensagem': f'Alerta de bateria baixa disparado: {location} com {battery_level}%'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro no teste de bateria baixa: {str(e)}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro interno: {str(e)}'
+        }), 500
+
+
+@api_bp.route('/api/test/alexa-battery', methods=['POST'])
+def test_alexa_battery():
+    """
+    Endpoint específico para testar resposta da Alexa sobre bateria baixa.
+    
+    Dispara múltiplos webhooks para garantir que a Alexa responda.
+    """
+    try:
+        data = request.get_json() or {}
+        battery_level = data.get('battery_level', 10)
+        location = data.get('location', 'Casa')
+        
+        # Timestamp atual
+        now = datetime.now()
+        timestamp = now.strftime("%H:%M")
+        
+        # Múltiplos webhooks para aumentar chance de resposta
+        webhooks_disparados = []
+        
+        # 1. Low Battery webhook
+        webhook_low = os.environ.get('WEBHOOK_LOW_BATTERY')
+        if webhook_low:
+            import requests
+            payload = {
+                'value1': f'ALERTA {location}',
+                'value2': f'BATERIA {battery_level}%',
+                'value3': f'AGORA {timestamp}'
+            }
+            try:
+                response = requests.post(webhook_low, json=payload, timeout=10)
+                webhooks_disparados.append({
+                    'tipo': 'low_battery',
+                    'sucesso': response.status_code == 200,
+                    'resposta': response.text
+                })
+            except Exception as e:
+                webhooks_disparados.append({
+                    'tipo': 'low_battery',
+                    'sucesso': False,
+                    'erro': str(e)
+                })
+        
+        # 2. Falha Inversor webhook (como backup)
+        webhook_falha = os.environ.get('WEBHOOK_FALHA_INVERSOR')
+        if webhook_falha:
+            import requests
+            payload = {
+                'value1': f'BATERIA CRÍTICA',
+                'value2': f'{location} - {battery_level}%',
+                'value3': f'Emergência às {timestamp}'
+            }
+            try:
+                response = requests.post(webhook_falha, json=payload, timeout=10)
+                webhooks_disparados.append({
+                    'tipo': 'falha_inversor',
+                    'sucesso': response.status_code == 200,
+                    'resposta': response.text
+                })
+            except Exception as e:
+                webhooks_disparados.append({
+                    'tipo': 'falha_inversor',
+                    'sucesso': False,
+                    'erro': str(e)
+                })
+        
+        # Log detalhado
+        logger.warning(f"🔊 ALEXA TEST: {location} - Bateria {battery_level}% - {len(webhooks_disparados)} webhooks disparados")
+        
+        return jsonify({
+            'status': 'sucesso',
+            'evento': 'alexa_battery_test',
+            'dados': {
+                'local': location,
+                'nivel_bateria': f'{battery_level}%',
+                'timestamp': timestamp,
+                'webhooks_disparados': len(webhooks_disparados),
+                'detalhes_webhooks': webhooks_disparados
+            },
+            'mensagem': f'Teste Alexa: {len(webhooks_disparados)} webhooks enviados para {location} com bateria {battery_level}%',
+            'dica': 'Verifique se o IFTTT está conectado à Alexa e os applets estão ativos'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro no teste Alexa: {str(e)}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro interno: {str(e)}'
+        }), 500
+
+
+@api_bp.route('/api/debug/webhooks', methods=['GET'])
+def debug_webhooks():
+    """
+    Endpoint de debug para verificar configuração dos webhooks.
+    """
+    try:
+        webhooks_config = {
+            'WEBHOOK_LOW_BATTERY': os.environ.get('WEBHOOK_LOW_BATTERY', 'NÃO CONFIGURADO'),
+            'WEBHOOK_FALHA_INVERSOR': os.environ.get('WEBHOOK_FALHA_INVERSOR', 'NÃO CONFIGURADO'),
+            'IFTTT_KEY': os.environ.get('IFTTT_KEY', 'NÃO CONFIGURADO'),
+            'env_loaded': bool(os.environ.get('SEMS_ACCOUNT'))
+        }
+        
+        return jsonify({
+            'status': 'debug',
+            'webhooks': webhooks_config,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro no debug: {str(e)}'
+        }), 500
     try:
         data = request.get_json() or {}
         evento = data.get('evento', 'geral')
@@ -484,3 +685,22 @@ def economia_inteligente():
             'status': 'erro',
             'detalhes': str(e)
         }), 500
+
+
+@api_bp.route('/api/planejamento/hoje', methods=['GET'])
+def planejamento_hoje():
+    """
+    Gera o plano do dia a partir do SoC e previsão (parâmetros opcionais):
+    - soc: float (0-100)
+    - forecast: float (kWh previstos)
+    """
+    try:
+        soc_raw = request.args.get('soc', '35')
+        forecast_raw = request.args.get('forecast', '8')
+        soc = float(soc_raw)
+        forecast = float(forecast_raw)
+    except ValueError:
+        return jsonify({'error': 'Parâmetros inválidos'}), 400
+
+    plan = build_daily_plan(soc, forecast)
+    return jsonify(plan), 200

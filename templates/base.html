@@ -105,6 +105,7 @@
           {% endif %}
           <li class="nav-item"><a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dash.dashboard') }}">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'estatisticas' %}active{% endif %}" href="{{ url_for('estatisticas.estatisticas') }}">Estatísticas</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'autopilot' %}active{% endif %}" href="{{ url_for('dash.autopilot') }}">Autopilot</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'aparelhos' %}active{% endif %}" href="{{ url_for('aparelhos.listar') }}">Aparelhos</a></li>
           {% if session.get('usuario_id') %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Sair</a></li>

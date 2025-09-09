@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, session, flash, request
+from services.energy_autopilot import build_daily_plan
 from services.goodwe_client import GoodWeClient
 from services.simula_evento import get_mock_event, dispara_alerta
 from routes.auth import login_required
@@ -53,6 +54,17 @@ def _extract_latest_value(resp):
     except Exception:
         pass
     return 0.0
+
+
+@dash_bp.route('/autopilot')
+@login_required
+def autopilot():
+    """Página que exibe o Plano do Dia do Energy Autopilot."""
+    # Valores padrão para demonstração; no futuro, ler do GoodWeClient
+    soc = float(request.args.get('soc', '35'))
+    forecast = float(request.args.get('forecast', '8'))
+    plan = build_daily_plan(soc, forecast)
+    return render_template('autopilot.html', plan=plan)
 
 @dash_bp.route('/dashboard')
 @login_required

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set active_page = 'autopilot' %}
+{% block title %}Plano do Dia | SolarMind{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <i class="fa-solid fa-robot fa-2x me-2" style="color:#FE5800;"></i>
+  <h3 class="mb-0">Energy Autopilot - Plano do Dia</h3>
+  <span class="ms-2 text-light">INTELIGÊNCIA OPERACIONAL</span>
+  <div class="ms-auto">
+    <a href="{{ url_for('dash.autopilot') }}" class="btn btn-outline-light btn-sm">Atualizar</a>
+  </div>
+  </div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="p-3 rounded tech-gradient">
+      <div class="fw-bold">Janela de Pico</div>
+      <div class="fs-4">{{ plan.peak_window.start }} – {{ plan.peak_window.end }}</div>
+      <div class="small">Evite operar cargas intensas nesse período.</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="p-3 rounded bg-dark text-white border border-secondary">
+      <div class="fw-bold">Estado de Carga (SoC)</div>
+      <div class="fs-4">{{ plan.soc }}%</div>
+      <div class="small">Geração prevista: {{ plan.forecast_kwh }} kWh</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="p-3 rounded bg-dark text-white border border-secondary">
+      <div class="fw-bold">Mensagem para Alexa</div>
+      <div>{{ plan.alexa_message }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-4">
+  <h5 class="mb-2">Recomendações</h5>
+  <ul class="list-group">
+    {% for rec in plan.recommendations %}
+    <li class="list-group-item bg-transparent text-white border-secondary">{{ rec }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="mt-4">
+  <h5 class="mb-2">Cargas a reduzir (se necessário)</h5>
+  {% if plan.shed and plan.shed|length > 0 %}
+  <ul class="list-group">
+    {% for dev in plan.shed %}
+    <li class="list-group-item bg-transparent text-white border-secondary">
+      <i class="fa-solid fa-bolt me-2" style="color:#FE5800;"></i>{{ dev }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="text-light">Nenhuma carga crítica a reduzir no momento.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
