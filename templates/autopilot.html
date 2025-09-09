@@ -30,7 +30,12 @@
   <div class="col-md-4">
     <div class="p-3 rounded bg-dark text-white border border-secondary">
       <div class="fw-bold">Mensagem para Alexa</div>
-      <div>{{ plan.alexa_message }}</div>
+  <div>{{ plan.alexa_message }}</div>
+      <div class="mt-2">
+        <button id="announceBtn" class="btn btn-sm btn-warning">Anunciar na Alexa</button>
+        <small id="announceStatus" class="ms-2 text-muted"></small>
+      </div>
+  <input type="hidden" id="alexaMsgVal" value="{{ plan.alexa_message | e }}" />
     </div>
   </div>
 </div>
@@ -59,4 +64,35 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const autopilotMessage = document.getElementById('alexaMsgVal')?.value || '';
+  document.getElementById('announceBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('announceBtn');
+    const status = document.getElementById('announceStatus');
+    btn.disabled = true; status.textContent = 'enviando...';
+    try {
+      const resp = await fetch('/api/autopilot/announce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: autopilotMessage })
+      });
+      const data = await resp.json();
+      if (data.status === 'sucesso') {
+        status.textContent = 'enviado ✅';
+      } else {
+        status.textContent = 'erro ❌';
+        console.warn('Announce error:', data);
+      }
+      setTimeout(() => status.textContent = '', 4000);
+    } catch (e) {
+      status.textContent = 'erro de rede';
+      setTimeout(() => status.textContent = '', 4000);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
 {% endblock %}

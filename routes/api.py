@@ -20,6 +20,7 @@ from models.usuario import Usuario
 from utils.energia import dispara_alerta, dispara_alerta_economia
 from services.energy_autopilot import build_daily_plan
 from utils.logger import get_logger
+from routes.auth import login_required
 
 logger = get_logger(__name__)
 
@@ -704,3 +705,88 @@ def planejamento_hoje():
 
     plan = build_daily_plan(soc, forecast)
     return jsonify(plan), 200
+
+
+@api_bp.route('/api/autopilot/announce', methods=['POST'])
+@login_required
+def autopilot_announce():
+    """
+    Dispara um anúncio do Plano do Dia para a Alexa via IFTTT Webhook.
+
+    Corpo opcional (JSON):
+      - message: string (mensagem pronta para a Alexa). Se ausente, o plano será calculado.
+      - soc: float (0-100) — opcional, usado para recalcular o plano se message não vier.
+      - forecast: float (kWh) — opcional, usado para recalcular o plano se message não vier.
+
+    Retorna JSON com status e detalhes do envio.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        msg = data.get('message')
+        soc_raw = data.get('soc') if 'soc' in data else request.args.get('soc')
+        forecast_raw = data.get('forecast') if 'forecast' in data else request.args.get('forecast')
+
+        # Se não vier mensagem, tenta montar a partir do plano
+        if not msg:
+            try:
+                soc = float(soc_raw) if soc_raw is not None else 35.0
+                forecast = float(forecast_raw) if forecast_raw is not None else 8.0
+            except ValueError:
+                return jsonify({'status': 'erro', 'mensagem': 'Parâmetros inválidos'}), 400
+            plan = build_daily_plan(soc, forecast)
+            msg = plan.get('alexa_message') or 'Plano do dia disponível.'
+
+        # Remove acentos para evitar cortes na fala (observação prática com Alexa)
+        def _strip_accents(text: str) -> str:
+            import unicodedata
+            return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+
+        final_msg = _strip_accents(str(msg))
+
+        webhooks = [
+            os.environ.get('WEBHOOK_ALEXA_ANNOUNCE'),  # preferencial, se configurado
+            os.environ.get('WEBHOOK_LOW_BATTERY'),
+            os.environ.get('WEBHOOK_FALHA_INVERSOR')
+        ]
+        webhooks = [w for w in webhooks if w]
+        if not webhooks:
+            return jsonify({'status': 'erro', 'mensagem': 'Nenhum webhook configurado (.env)'}), 500
+
+        import requests
+        payload = {
+            'value1': final_msg,
+            'value2': 'autopilot',
+            'value3': datetime.now().strftime('%H:%M')
+        }
+        details = []
+        any_ok = False
+        for idx, wh in enumerate(webhooks):
+            try:
+                resp = requests.post(wh, json=payload, timeout=10)
+                ok = (resp.status_code == 200)
+                any_ok = any_ok or ok
+                details.append({
+                    'webhook_index': idx,
+                    'url_present': True,
+                    'http_status': resp.status_code,
+                    'ok': ok,
+                    'body': (resp.text or '')[:300]
+                })
+            except Exception as e:
+                logger.error(f"Erro ao chamar webhook {idx}: {e}")
+                details.append({
+                    'webhook_index': idx,
+                    'url_present': True,
+                    'ok': False,
+                    'erro': str(e)
+                })
+
+        return jsonify({
+            'status': 'sucesso' if any_ok else 'erro',
+            'mensagem_enviada': final_msg,
+            'resultados': details
+        }), (200 if any_ok else 502)
+
+    except Exception as e:
+        logger.error(f"Erro no announce do Autopilot: {e}")
+        return jsonify({'status': 'erro', 'mensagem': f'Erro interno: {str(e)}'}), 500
