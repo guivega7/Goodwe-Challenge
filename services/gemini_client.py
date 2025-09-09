@@ -3,7 +3,7 @@ Cliente Gemini para análises e insights inteligentes do SolarMind.
 
 Integra com a API do Google Gemini para:
 - Gerar insights sobre consumo/geração solar
-- Chat inteligente sobre o projeto
+- Chat inteligente sobre energia solar para usuários
 - Análises em linguagem natural dos dados históricos
 """
 
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 class GeminiClient:
-    """Cliente para integração com Google Gemini API."""
+    """Cliente para integração com Google Gemini API focado em energia solar B2C."""
     
     def __init__(self):
         self.api_key = os.getenv('GEMINI_API_KEY')
@@ -31,39 +31,183 @@ class GeminiClient:
     def is_enabled(self) -> bool:
         """Verifica se o Gemini está habilitado e configurado."""
         enabled = os.getenv('ENABLE_GEMINI', 'true').lower() in ('1', 'true', 'yes', 'on')
-        has_key = bool(self.api_key and self.api_key.strip())
-        return enabled and has_key
+        return enabled and bool(self.api_key)
     
-    def _make_request(self, prompt: str, context: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Faz requisição para a API do Gemini."""
+    def generate_insights(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gera insights personalizados sobre dados de energia solar.
+        
+        Args:
+            data: Dados do sistema (energia_gerada, consumida, SOC, etc.)
+            
+        Returns:
+            Dict com insights gerados ou fallback em caso de erro
+        """
         if not self.is_enabled():
-            logger.warning("Gemini está desabilitado ou sem API key")
-            return None
-            
-        # Monta o prompt final
-        full_prompt = prompt
-        if context:
-            full_prompt = f"Contexto:\n{context}\n\nPergunta: {prompt}"
-            
-        url = f"{self.base_url}/{self.model}:generateContent"
-        
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            'contents': [{
-                'parts': [{
-                    'text': full_prompt
-                }]
-            }],
-            'generationConfig': {
-                'maxOutputTokens': self.max_tokens,
-                'temperature': 0.7
-            }
-        }
+            return self._get_fallback_insights(data)
         
         try:
+            # Cria prompt focado em B2C com contexto de energia solar
+            prompt = self._create_insights_prompt(data)
+            
+            # Chama API do Gemini
+            response = self._call_gemini_api(prompt)
+            
+            if response:
+                return {
+                    'insights': response,
+                    'source': 'gemini_ai',
+                    'generated_at': datetime.now().isoformat(),
+                    'data_analyzed': data
+                }
+            else:
+                return self._get_fallback_insights(data)
+                
+        except Exception as e:
+            logger.error(f"Erro ao gerar insights: {e}")
+            return self._get_fallback_insights(data)
+    
+    def chat_response(self, message: str, user_data: Dict = None, conversation_history: List[Dict] = None) -> Dict[str, Any]:
+        """
+        Resposta de chat sobre energia solar para usuários finais.
+        
+        Args:
+            message: Mensagem do usuário
+            user_data: Dados do sistema do usuário
+            conversation_history: Histórico da conversa
+            
+        Returns:
+            Dict com resposta ou fallback
+        """
+        if not self.is_enabled():
+            return self._get_fallback_chat_response(message)
+        
+        try:
+            # Cria prompt simples focado em energia solar
+            prompt = self._create_simple_chat_prompt(message, user_data)
+            
+            # Adiciona histórico se disponível
+            if conversation_history:
+                prompt = self._add_conversation_history(prompt, conversation_history)
+            
+            # Chama API do Gemini
+            response = self._call_gemini_api(prompt)
+            
+            if response:
+                return {
+                    'response': response,
+                    'source': 'gemini_solar_ai',
+                    'generated_at': datetime.now().isoformat(),
+                    'context_used': True
+                }
+            else:
+                return self._get_fallback_chat_response(message)
+                
+        except Exception as e:
+            logger.error(f"Erro no chat: {e}")
+            return self._get_fallback_chat_response(message)
+    
+    def _create_insights_prompt(self, data: Dict[str, Any]) -> str:
+        """Cria prompt para insights focado em usuário final."""
+        energia_gerada = data.get('energia_gerada', 0)
+        energia_consumida = data.get('energia_consumida', 0)
+        soc_bateria = data.get('soc_bateria', 0)
+        economia_estimada = data.get('economia_estimada', 0)
+        
+        prompt = f"""Você é um consultor de energia solar especializado em ajudar usuários residenciais.
+
+DADOS DE HOJE:
+- Energia gerada: {energia_gerada:.1f} kWh
+- Energia consumida: {energia_consumida:.1f} kWh
+- Bateria: {soc_bateria:.0f}%
+- Economia estimada: R$ {economia_estimada:.2f}
+
+TAREFA: Gere 3 insights práticos e motivadores para o usuário, focando em:
+1. Performance do sistema hoje
+2. Dica prática de otimização
+3. Impacto positivo (economia/sustentabilidade)
+
+FORMATO:
+- Use linguagem simples e amigável
+- Seja específico com os números
+- Termine cada insight com uma ação prática
+- Máximo 50 palavras por insight
+- Tom positivo e encorajador
+
+Insights:"""
+        
+        return prompt
+    
+    def _create_simple_chat_prompt(self, message: str, user_data: Dict = None) -> str:
+        """Cria prompt simples para chat sobre energia solar."""
+        prompt = """Você é um assistente de energia solar residencial especializado em ajudar usuários comuns.
+
+SUAS CARACTERÍSTICAS:
+- Use linguagem simples e amigável
+- Foque em economia e sustentabilidade
+- Dê dicas práticas
+- Seja motivador e positivo
+- Use emojis ocasionalmente
+
+"""
+        
+        # Adiciona dados do usuário se disponíveis
+        if user_data:
+            prompt += "DADOS ATUAIS DO USUÁRIO:\n"
+            if user_data.get('energia_gerada'):
+                prompt += f"- Energia gerada hoje: {user_data['energia_gerada']} kWh\n"
+            if user_data.get('energia_consumida'):
+                prompt += f"- Energia consumida hoje: {user_data['energia_consumida']} kWh\n"
+            if user_data.get('soc_bateria'):
+                prompt += f"- Carga da bateria: {user_data['soc_bateria']}%\n"
+            prompt += "\n"
+        
+        prompt += f"PERGUNTA DO USUÁRIO: {message}\n\n"
+        prompt += """Responda de forma clara e prática, máximo 150 palavras. Se possível, use os dados do usuário na resposta."""
+        
+        return prompt
+    
+    def _add_conversation_history(self, prompt: str, history: List[Dict]) -> str:
+        """Adiciona histórico relevante ao prompt."""
+        if not history or len(history) == 0:
+            return prompt
+        
+        # Pega últimas 3 mensagens para contexto
+        recent_history = history[-3:] if len(history) > 3 else history
+        
+        history_text = "\nCONVERSA ANTERIOR:\n"
+        for msg in recent_history:
+            role = "Usuário" if msg.get('role') == 'user' else "Assistente"
+            content = msg.get('content', '')[:100]  # Limita a 100 chars
+            history_text += f"{role}: {content}\n"
+        
+        return history_text + "\n" + prompt
+    
+    def _call_gemini_api(self, prompt: str) -> Optional[str]:
+        """Faz chamada para API do Gemini."""
+        if not self.api_key:
+            logger.warning("API key do Gemini não configurada")
+            return None
+        
+        try:
+            url = f"{self.base_url}/{self.model}:generateContent"
+            
+            headers = {
+                'Content-Type': 'application/json',
+            }
+            
+            payload = {
+                'contents': [{
+                    'parts': [{
+                        'text': prompt
+                    }]
+                }],
+                'generationConfig': {
+                    'maxOutputTokens': self.max_tokens,
+                    'temperature': 0.7
+                }
+            }
+            
             response = requests.post(
                 url,
                 headers=headers,
@@ -73,167 +217,115 @@ class GeminiClient:
             )
             
             if response.status_code == 200:
-                return response.json()
+                result = response.json()
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    content = result['candidates'][0].get('content', {})
+                    if 'parts' in content and len(content['parts']) > 0:
+                        return content['parts'][0].get('text', '').strip()
             else:
-                logger.error(f"Gemini API error {response.status_code}: {response.text}")
-                return None
+                logger.error(f"Erro na API Gemini: {response.status_code} - {response.text}")
                 
         except requests.exceptions.Timeout:
-            logger.error("Timeout na requisição para Gemini")
-            return None
+            logger.error("Timeout na chamada para Gemini API")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erro de conexão com Gemini API: {e}")
         except Exception as e:
-            logger.error(f"Erro na requisição Gemini: {e}")
-            return None
+            logger.error(f"Erro inesperado na API Gemini: {e}")
+        
+        return None
     
-    def extract_text_response(self, response: Optional[Dict[str, Any]]) -> str:
-        """Extrai o texto da resposta do Gemini."""
-        if not response:
-            return "Desculpe, não consegui gerar uma resposta no momento."
-            
-        try:
-            candidates = response.get('candidates', [])
-            if candidates:
-                content = candidates[0].get('content', {})
-                parts = content.get('parts', [])
-                if parts:
-                    return parts[0].get('text', '').strip()
-        except Exception as e:
-            logger.error(f"Erro ao extrair texto do Gemini: {e}")
-            
-        return "Erro ao processar resposta da IA."
-    
-    def generate_insights(self, energia_gerada: float, energia_consumida: float, 
-                         soc_bateria: float, periodo: str = "hoje") -> str:
-        """
-        Gera insights sobre o desempenho do sistema solar.
+    def _get_fallback_insights(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Insights de fallback quando Gemini não está disponível."""
+        energia_gerada = data.get('energia_gerada', 0)
+        energia_consumida = data.get('energia_consumida', 0)
+        soc_bateria = data.get('soc_bateria', 0)
         
-        Args:
-            energia_gerada: Energia gerada em kWh
-            energia_consumida: Energia consumida em kWh  
-            soc_bateria: Estado de carga da bateria (%)
-            periodo: Período de análise ("hoje", "semana", etc.)
-            
-        Returns:
-            str: Insights em linguagem natural
-        """
-        prompt = f"""
-        Você é um especialista em energia solar analisando dados de um sistema residencial.
+        insights = []
         
-        Dados do sistema {periodo}:
-        - Energia gerada: {energia_gerada} kWh
-        - Energia consumida: {energia_consumida} kWh
-        - Estado da bateria: {soc_bateria}%
-        
-        Gere insights úteis em português brasileiro sobre:
-        1. Eficiência do sistema
-        2. Oportunidades de economia
-        3. Recomendações práticas
-        4. Comparação com médias típicas
-        
-        Seja objetivo, prático e use uma linguagem amigável.
-        Limite sua resposta a 200 palavras.
-        """
-        
-        response = self._make_request(prompt)
-        return self.extract_text_response(response)
-    
-    def chat_response(self, message: str, conversation_context: Optional[List[Dict]] = None) -> str:
-        """
-        Responde uma mensagem de chat sobre o sistema solar.
-        
-        Args:
-            message: Mensagem do usuário
-            conversation_context: Histórico da conversa
-            
-        Returns:
-            str: Resposta do assistente
-        """
-        # Monta contexto da conversa
-        context_str = ""
-        if conversation_context:
-            context_str = "Histórico da conversa:\n"
-            for msg in conversation_context[-5:]:  # Últimas 5 mensagens
-                role = "Usuário" if msg.get('role') == 'user' else "Assistente"
-                context_str += f"{role}: {msg.get('content', '')}\n"
-            context_str += "\n"
-        
-        prompt = f"""
-        Você é um assistente especializado em energia solar e o sistema SolarMind.
-        
-        O SolarMind é uma plataforma que:
-        - Monitora sistemas solares residenciais GoodWe
-        - Controla aparelhos domésticos
-        - Gera insights com IA
-        - Integra com Alexa e IFTTT
-        - Tem funcionalidades como Energy Autopilot (plano do dia)
-        
-        {context_str}Pergunta atual: {message}
-        
-        Responda de forma útil, técnica quando necessário, mas sempre amigável.
-        Se a pergunta não for sobre energia solar ou o sistema, redirecione educadamente.
-        Limite sua resposta a 150 palavras.
-        """
-        
-        response = self._make_request(prompt)
-        return self.extract_text_response(response)
-    
-    def analyze_project_question(self, question: str, project_context: str = "") -> str:
-        """
-        Responde perguntas sobre o projeto SolarMind usando contexto dos arquivos.
-        
-        Args:
-            question: Pergunta sobre o projeto
-            project_context: Contexto extraído dos arquivos do projeto
-            
-        Returns:
-            str: Resposta baseada no contexto do projeto
-        """
-        prompt = f"""
-        Você é um assistente que conhece profundamente o projeto SolarMind.
-        
-        Responda a pergunta baseando-se no contexto fornecido.
-        Se não souber algo específico, seja honesto sobre isso.
-        
-        Pergunta: {question}
-        """
-        
-        response = self._make_request(prompt, project_context)
-        return self.extract_text_response(response)
-    
-    def test_connection(self) -> Dict[str, Any]:
-        """
-        Testa a conexão com o Gemini.
-        
-        Returns:
-            dict: Status da conexão e resposta de teste
-        """
-        if not self.is_enabled():
-            return {
-                'status': 'disabled',
-                'message': 'Gemini está desabilitado ou sem API key',
-                'enabled': False,
-                'has_key': bool(self.api_key)
-            }
-        
-        test_prompt = "Responda apenas: 'Conexão com Gemini funcionando!'"
-        response = self._make_request(test_prompt)
-        
-        if response:
-            text = self.extract_text_response(response)
-            return {
-                'status': 'success',
-                'message': text,
-                'enabled': True,
-                'model': self.model
-            }
+        # Insight 1: Performance
+        if energia_gerada > energia_consumida:
+            insights.append(
+                f"🌞 Excelente! Você gerou {energia_gerada:.1f} kWh e consumiu {energia_consumida:.1f} kWh. "
+                f"Sua energia solar cobriu {(energia_gerada/energia_consumida*100):.0f}% do consumo hoje!"
+            )
         else:
-            return {
-                'status': 'error',
-                'message': 'Falha na comunicação com Gemini',
-                'enabled': True,
-                'model': self.model
-            }
+            insights.append(
+                f"☀️ Hoje gerou {energia_gerada:.1f} kWh contra {energia_consumida:.1f} kWh consumidos. "
+                f"Dica: use aparelhos pesados entre 10h-16h para aproveitar mais o sol!"
+            )
+        
+        # Insight 2: Bateria
+        if soc_bateria > 80:
+            insights.append(
+                f"🔋 Bateria em {soc_bateria:.0f}%! Perfeito para passar pelo horário de ponta (18h-21h) "
+                f"sem pagar energia cara da rede. Mantenha aparelhos pesados desligados à noite."
+            )
+        elif soc_bateria < 30:
+            insights.append(
+                f"⚡ Bateria em {soc_bateria:.0f}%. Evite usar aparelhos pesados agora. "
+                f"Aguarde o sol carregar a bateria ou use apenas o essencial até amanhã."
+            )
+        else:
+            insights.append(
+                f"🔄 Bateria em {soc_bateria:.0f}% - nível adequado. "
+                f"Use com moderação e reserve energia para o horário de ponta (18h-21h)."
+            )
+        
+        # Insight 3: Sustentabilidade
+        co2_evitado = energia_gerada * 0.5  # kg CO2 por kWh
+        insights.append(
+            f"🌱 Impacto ambiental: evitou {co2_evitado:.1f}kg de CO2 hoje! "
+            f"Equivale a {co2_evitado/2:.1f} km rodados por um carro. Continue fazendo a diferença!"
+        )
+        
+        return {
+            'insights': insights,
+            'source': 'fallback_rules',
+            'generated_at': datetime.now().isoformat(),
+            'data_analyzed': data
+        }
+    
+    def _get_fallback_chat_response(self, message: str) -> Dict[str, Any]:
+        """Resposta de fallback para chat quando Gemini não está disponível."""
+        message_lower = message.lower()
+        
+        # Respostas baseadas em palavras-chave
+        if any(word in message_lower for word in ['economia', 'economizar', 'conta', 'dinheiro']):
+            response = (
+                "💰 Para economizar mais: 1) Use aparelhos pesados entre 10h-16h (energia grátis do sol), "
+                "2) Evite horário de ponta 18h-21h (mais caro), 3) Carregue dispositivos durante o dia. "
+                "Dica: acompanhe os dados diários para otimizar seu consumo!"
+            )
+        elif any(word in message_lower for word in ['bateria', 'soc', 'carga']):
+            response = (
+                "🔋 Sobre a bateria: mantenha entre 20-90% para durar mais. Durante o dia ela carrega com sol, "
+                "à noite use com moderação. No horário de ponta (18h-21h) é sua melhor amiga para evitar energia cara!"
+            )
+        elif any(word in message_lower for word in ['limpeza', 'limpar', 'sujeira', 'manutenção']):
+            response = (
+                "🧽 Limpeza dos painéis: uma vez por mês com água limpa e pano macio, de manhã cedo. "
+                "Sujeira pode reduzir 25% da geração! Evite produtos químicos e nunca limpe painéis quentes."
+            )
+        elif any(word in message_lower for word in ['horário', 'quando', 'melhor hora']):
+            response = (
+                "⏰ Horários ideais: 10h-16h = energia grátis (use à vontade), "
+                "18h-21h = horário de ponta (só o essencial), resto do dia = consumo moderado. "
+                "Programe máquina de lavar, ferro e aparelhos pesados para o meio do dia!"
+            )
+        else:
+            response = (
+                "☀️ Olá! Sou seu assistente de energia solar. Posso ajudar com dicas de economia, "
+                "horários ideais, cuidados com equipamentos e interpretação dos seus dados. "
+                "O que gostaria de saber sobre seu sistema solar?"
+            )
+        
+        return {
+            'response': response,
+            'source': 'fallback_keywords',
+            'generated_at': datetime.now().isoformat(),
+            'context_used': False
+        }
 
 
-# Instância global para reutilização
+# Instância global do cliente
 gemini_client = GeminiClient()

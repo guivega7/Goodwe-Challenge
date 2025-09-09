@@ -28,7 +28,7 @@ def listar():
     """
     if 'usuario_id' not in session:
         logger.warning("Unauthorized access attempt to device list")
-        return render_template('aparelhos.html', aparelhos=[])
+        return render_template('aparelhos.html', aparelhos=[], aparelhos_data={"labels": [], "data": []})
 
     try:
         aparelhos = (Aparelho.query
@@ -51,7 +51,7 @@ def listar():
         
     except Exception as e:
         logger.error(f"Error retrieving device list: {e}")
-        return render_template('aparelhos.html', aparelhos=[])
+        return render_template('aparelhos.html', aparelhos=[], aparelhos_data={"labels": [], "data": []})
 
 
 @aparelhos_bp.route('/aparelhos/adicionar', methods=['POST'])
