@@ -64,6 +64,7 @@ def create_app():
     from routes.estatisticas import estatisticas_bp
     from routes.aparelhos import aparelhos_bp
     from routes.alexa import alexa_bp
+    from routes.chat import chat_bp
     
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
@@ -72,6 +73,7 @@ def create_app():
     app.register_blueprint(aparelhos_bp)
     app.register_blueprint(estatisticas_bp)
     app.register_blueprint(alexa_bp)
+    app.register_blueprint(chat_bp)
 
     # Inicializa Scheduler (APScheduler)
     with app.app_context():

@@ -20,9 +20,12 @@ Sistema inteligente para monitoramento e controle de energia solar com integraç
 - **Webhooks IFTTT**: Triggers automáticos baseados em eventos
 
 ### 📊 Inteligência Artificial
+- **Gemini AI**: Chat inteligente e geração de insights personalizados
 - **Análise Preditiva**: Previsão de consumo baseada em padrões históricos
 - **Aprendizado de Máquina**: Identificação automática de padrões de uso
 - **Alertas Inteligentes**: Notificações proativas sobre manutenção e consumo
+- **Chat IA**: Assistente virtual especializado em energia solar
+- **Insights Automáticos**: Relatórios inteligentes gerados por IA
 
 ### ⚡ Monitoramento Solar
 - **Status do Sistema**: Monitoramento em tempo real do sistema fotovoltaico
@@ -36,6 +39,13 @@ Sistema inteligente para monitoramento e controle de energia solar com integraç
 - **SQLAlchemy**: ORM para banco de dados
 - **SQLite**: Banco de dados local
 - **Python 3.8+**: Linguagem principal
+- **APScheduler**: Agendamento de tarefas automáticas
+- **Flask-Login**: Sistema de autenticação profissional
+
+### Inteligência Artificial
+- **Google Gemini**: IA generativa para insights e chat
+- **RAG System**: Conhecimento contextual do projeto
+- **NLP**: Processamento de linguagem natural
 
 ### Frontend
 - **HTML5/CSS3**: Interface web responsiva
@@ -114,10 +124,24 @@ solarmind/
 
 4. **Configure as variáveis de ambiente**
    ```bash
-   # Crie um arquivo .env na raiz do projeto
+   # Copie o arquivo de exemplo
+   copy .env.example .env
+   
+   # Edite o .env com suas configurações
    SECRET_KEY=sua-chave-secreta-super-segura
    FLASK_DEBUG=True
-   DATABASE_URL=sqlite:///solarmind.db
+   DATABASE_URL=sqlite:///instance/solarmind.db
+   
+   # Para usar IA, configure sua API key do Gemini (GRATUITA):
+   GEMINI_API_KEY=sua-api-key-aqui
+   ENABLE_GEMINI=true
+   ```
+
+   **🤖 Para configurar o Gemini AI:**
+   1. Acesse: https://makersuite.google.com/app/apikey
+   2. Crie uma API key gratuita
+   3. Cole no arquivo `.env`
+   4. Veja instruções detalhadas em: [GEMINI_SETUP.md](GEMINI_SETUP.md)
    IFTTT_WEBHOOK_URL=https://maker.ifttt.com/trigger/
    IFTTT_KEY=sua-chave-ifttt
    ```
@@ -179,6 +203,50 @@ Content-Type: application/json
 }
 ```
 
+## 🤖 Inteligência Artificial
+
+### Chat IA
+Converse com o assistente virtual especializado em energia solar:
+```http
+POST /chat/send
+Content-Type: application/json
+
+{
+  "message": "Como posso melhorar minha eficiência energética?"
+}
+```
+
+### Insights Inteligentes
+Gere análises personalizadas dos seus dados:
+```http
+POST /api/ia/insights
+Content-Type: application/json
+
+{
+  "energia_gerada": 25.5,
+  "energia_consumida": 18.2,
+  "soc_bateria": 85,
+  "periodo": "hoje"
+}
+```
+
+### Teste de Configuração
+Verifique se sua API key do Gemini está funcionando:
+```bash
+# Teste direto via endpoint
+GET /api/gemini/test
+
+# Ou use o script de teste
+python test_gemini.py
+```
+
+### Funcionalidades IA Disponíveis
+- 💬 **Chat Inteligente**: Perguntas sobre energia solar e otimização
+- 📊 **Insights Personalizados**: Análises baseadas nos seus dados reais
+- 📅 **Resumos Automáticos**: Relatórios diários às 21:30
+- 🌅 **Anúncios Matinais**: Alertas inteligentes às 08:00
+- 📈 **Análise de Tendências**: Identificação de padrões de consumo
+
 ## 🔧 Configuração IFTTT
 
 ### Alexa Integration
@@ -206,7 +274,11 @@ Similar ao Alexa, mas usando o serviço Google Assistant no IFTTT.
 
 ## 📋 Roadmap
 
-- [ ] **Dashboard Avançado**: Gráficos interativos com Chart.js
+- [x] **Dashboard Avançado**: Gráficos interativos com Chart.js ✅
+- [x] **Integração IA**: Google Gemini para insights e chat ✅  
+- [x] **Scheduler Automático**: Tarefas agendadas com APScheduler ✅
+- [x] **Flask-Login**: Sistema de autenticação profissional ✅
+- [ ] **RAG System**: Chat com conhecimento específico do projeto
 - [ ] **App Mobile**: Aplicativo React Native
 - [ ] **ML Avançado**: Modelos TensorFlow para previsão
 - [ ] **IoT Integration**: Suporte a dispositivos IoT
@@ -222,7 +294,17 @@ Similar ao Alexa, mas usando o serviço Google Assistant no IFTTT.
 
 ## 📝 Changelog
 
-### v1.0.0 (2024-12-07)
+### v2.0.0 (2025-09-09) - IA INTEGRATION 🤖
+- ✨ **Gemini AI**: Chat inteligente e geração de insights
+- 🕒 **APScheduler**: Resumos diários automáticos (21:30) e anúncios matinais (08:00)  
+- 🔐 **Flask-Login**: Sistema de autenticação profissional com UserMixin
+- 💬 **Chat IA**: Interface de conversação com histórico persistente
+- 📊 **Insights Dashboard**: Card de IA no dashboard com geração on-demand
+- 🗃️ **ChatMessage Model**: Persistência de conversas no SQLite
+- 🧪 **Script de Teste**: Verificação automática de configuração do Gemini
+- 📚 **Documentação IA**: Guia completo de setup em GEMINI_SETUP.md
+
+### v1.0.0 (2024-12-07) - FOUNDATION 🏗️
 - ✨ Integração completa com IFTTT e Alexa
 - 🤖 Sistema de IA para previsão de consumo
 - 🏠 Automação residencial inteligente

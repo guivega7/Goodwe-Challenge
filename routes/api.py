@@ -22,6 +22,7 @@ from services.energy_autopilot import build_daily_plan
 from utils.logger import get_logger
 from routes.auth import login_required
 from services.scheduler import get_jobs_info
+from services.gemini_client import gemini_client
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,69 @@ def scheduler_health():
         })
     except Exception as e:
         return jsonify({'scheduler': 'error', 'error': str(e)}), 500
+
+
+@api_bp.route('/api/gemini/test')
+def gemini_test():
+    """Testa conexão com Gemini e retorna status."""
+    try:
+        result = gemini_client.test_connection()
+        status_code = 200 if result['status'] == 'success' else 503
+        return jsonify(result), status_code
+    except Exception as e:
+        return jsonify({
+            'status': 'error', 
+            'message': f'Erro interno: {str(e)}'
+        }), 500
+
+
+@api_bp.route('/api/ia/insights', methods=['POST'])
+@login_required
+def gerar_insights():
+    """
+    Gera insights sobre o sistema solar usando Gemini.
+    
+    Corpo JSON esperado:
+        energia_gerada: float (kWh)
+        energia_consumida: float (kWh) 
+        soc_bateria: float (0-100)
+        periodo: str (opcional, default: "hoje")
+    """
+    try:
+        data = request.get_json() or {}
+        
+        energia_gerada = float(data.get('energia_gerada', 0))
+        energia_consumida = float(data.get('energia_consumida', 0))
+        soc_bateria = float(data.get('soc_bateria', 0))
+        periodo = data.get('periodo', 'hoje')
+        
+        insights = gemini_client.generate_insights(
+            energia_gerada, energia_consumida, soc_bateria, periodo
+        )
+        
+        return jsonify({
+            'status': 'sucesso',
+            'insights': insights,
+            'dados': {
+                'energia_gerada': energia_gerada,
+                'energia_consumida': energia_consumida,
+                'soc_bateria': soc_bateria,
+                'periodo': periodo
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': 'Parâmetros inválidos'
+        }), 400
+    except Exception as e:
+        logger.error(f"Erro ao gerar insights: {e}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro interno: {str(e)}'
+        }), 500
 
 
 # ========== INTEGRAÇÃO COM ASSISTENTES INTELIGENTES ==========
