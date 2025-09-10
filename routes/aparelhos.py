@@ -5,7 +5,7 @@ This module provides web routes for managing smart home devices,
 including adding, editing, removing, and controlling device states.
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, flash
 
 from models.aparelho import Aparelho
 from extensions import db
@@ -67,7 +67,12 @@ def adicionar():
         return {"error": "Usuário não autenticado."}, 401
 
     try:
-        data = request.get_json()
+        # Aceita tanto JSON quanto form data
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
+            
         if not data:
             return {"error": "Dados não fornecidos."}, 400
 
@@ -110,6 +115,14 @@ def adicionar():
         db.session.commit()
 
         logger.info(f"Device '{nome}' added for user {session['usuario_id']}")
+        
+        # Se for form data, redireciona de volta para a página
+        # Fixed redirect endpoint name
+        if not request.is_json:
+            flash(f"Aparelho '{nome}' adicionado com sucesso!", 'success')
+            return redirect(url_for('aparelhos.listar'))
+        
+        # Se for JSON, retorna resposta JSON
         return {"message": f"Aparelho '{nome}' adicionado com sucesso."}, 201
 
     except Exception as e:

@@ -3,6 +3,7 @@
 {% block title %}Chat IA | SolarMind{% endblock %}
 
 {% block content %}
+<div class="container-fluid px-4">
 <div class="d-flex align-items-center mb-3">
   <i class="fa-solid fa-robot fa-2x me-2" style="color:#FE5800;"></i>
   <h3 class="mb-0">Chat com IA Solar</h3>
@@ -15,25 +16,27 @@
 <div class="row">
   <div class="col-12">
     <!-- Área de mensagens -->
-    <div id="chatMessages" class="bg-dark rounded p-3 mb-3" style="height: 400px; overflow-y: auto;">
-      <div class="text-center text-muted">
-        <i class="fa-solid fa-comments fa-2x mb-2"></i>
-        <p>Olá! Sou seu assistente de energia solar. Pergunte sobre o SolarMind, sistemas solares ou qualquer dúvida técnica!</p>
+    <div class="glass p-4 mb-4">
+      <div id="chatMessages" class="bg-dark rounded p-4 mb-3" style="height: 400px; overflow-y: auto;">
+        <div class="text-center text-light opacity-75">
+          <i class="fa-solid fa-comments fa-2x mb-2"></i>
+          <p>Olá! Sou seu assistente de energia solar. Pergunte sobre o SolarMind, sistemas solares ou qualquer dúvida técnica!</p>
+        </div>
       </div>
-    </div>
-    
-    <!-- Formulário de envio -->
-    <div class="input-group">
-      <input type="text" id="messageInput" class="form-control form-control-lg" 
-             placeholder="Digite sua pergunta sobre energia solar..." maxlength="500">
-      <button id="sendBtn" class="btn btn-warning" type="button">
-        <i class="fa-solid fa-paper-plane"></i> Enviar
-      </button>
-    </div>
-    
-    <!-- Status -->
-    <div class="mt-2">
-      <small id="chatStatus" class="text-muted"></small>
+      
+      <!-- Formulário de envio -->
+      <div class="input-group">
+        <input type="text" id="messageInput" class="form-control form-control-lg" 
+               placeholder="Digite sua pergunta sobre energia solar..." maxlength="500">
+        <button id="sendBtn" class="btn btn-warning" type="button">
+          <i class="fa-solid fa-paper-plane"></i> Enviar
+        </button>
+      </div>
+      
+      <!-- Status -->
+      <div class="mt-3">
+        <small id="chatStatus" class="text-light opacity-75"></small>
+      </div>
     </div>
   </div>
 </div>
@@ -132,8 +135,11 @@ class ChatUI {
     messageDiv.className = `mb-3 d-flex ${isUser ? 'justify-content-end' : 'justify-content-start'}`;
     
     const bubble = document.createElement('div');
-    bubble.className = `p-3 rounded ${isUser ? 'bg-warning text-dark' : 'bg-secondary text-white'}`;
+    bubble.className = `p-3 rounded ${isUser ? 'bg-warning text-white' : 'bg-secondary text-white'}`;
     bubble.style.maxWidth = '80%';
+    if (isUser) {
+      bubble.style.background = 'linear-gradient(45deg, #ffc107, #ff8c00)';
+    }
     
     const icon = isUser ? '👤' : '🤖';
     const time = new Date(message.timestamp).toLocaleTimeString('pt-BR', {
@@ -201,7 +207,7 @@ class ChatUI {
       
       if (data.status === 'sucesso') {
         this.messagesContainer.innerHTML = `
-          <div class="text-center text-muted">
+          <div class="text-center text-light opacity-75">
             <i class="fa-solid fa-comments fa-2x mb-2"></i>
             <p>Histórico limpo! Faça sua primeira pergunta.</p>
           </div>
@@ -225,4 +231,5 @@ document.addEventListener('DOMContentLoaded', () => {
   new ChatUI();
 });
 </script>
+</div> <!-- fecha container-fluid -->
 {% endblock %}

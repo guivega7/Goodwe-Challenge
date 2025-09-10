@@ -100,13 +100,19 @@ def send_message():
         context = [{'role': msg.role, 'content': msg.content} for msg in reversed(recent_messages)]
         
         # Gera resposta da IA
-        ai_response = gemini_client.chat_response(user_message, context)
+        ai_response_data = gemini_client.chat_response(user_message, user_data=None, conversation_history=context)
+        
+        # Extrai apenas o texto da resposta (não o dict completo)
+        if isinstance(ai_response_data, dict):
+            ai_response_text = ai_response_data.get('response', 'Erro na resposta da IA')
+        else:
+            ai_response_text = str(ai_response_data)
         
         # Salva resposta da IA
         ai_msg = ChatMessage(
             usuario_id=current_user.id,
             role='assistant',
-            content=ai_response
+            content=ai_response_text
         )
         db.session.add(ai_msg)
         db.session.commit()

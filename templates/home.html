@@ -3,6 +3,7 @@
 {% set active_page = 'home' %}
 
 {% block content %}
+<div class="container-fluid px-4">
 <!-- Hero Section -->
 <div class="text-center py-5">
   <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="SolarMind" 
@@ -144,4 +145,5 @@
     </div>
   </div>
 </div>
+</div> <!-- fecha container-fluid -->
 {% endblock %}

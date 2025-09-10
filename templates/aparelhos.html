@@ -3,6 +3,7 @@
 {% block title %}Aparelhos{% endblock %}
 
 {% block content %}
+<div class="container-fluid px-4">
 <style>
     body {
         color: white; /* Define o texto como branco */
@@ -44,7 +45,7 @@
         pointer-events: auto;
         z-index: 1051;
         background-color: #fff;
-        color: #000;
+        color: #333;
         border: 1px solid #ced4da;
     }
 
@@ -66,37 +67,37 @@
         <!-- KPIs Resumo -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
-                <div class="glass text-center">
-                    <i class="fas fa-plug text-warning fa-2x mb-2"></i>
-                    <h5 class="fw-bold">{{ aparelhos|length if aparelhos else 4 }}</h5>
+                <div class="glass text-center p-4">
+                    <i class="fas fa-plug text-warning fa-2x mb-3"></i>
+                    <h5 class="fw-bold mb-2">{{ aparelhos|length if aparelhos else 4 }}</h5>
                     <small class="text-muted">Aparelhos Conectados</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="glass text-center">
-                    <i class="fas fa-bolt text-success fa-2x mb-2"></i>
-                    <h5 class="fw-bold">{% if aparelhos %}{{ "%.1f"|format(aparelhos|sum(attribute='consumo')) }}{% else %}12.5{% endif %} kWh</h5>
+                <div class="glass text-center p-4">
+                    <i class="fas fa-bolt text-success fa-2x mb-3"></i>
+                    <h5 class="fw-bold mb-2">{% if aparelhos %}{{ "%.1f"|format(aparelhos|sum(attribute='consumo')) }}{% else %}12.5{% endif %} kWh</h5>
                     <small class="text-muted">Consumo Total Hoje</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="glass text-center">
-                    <i class="fas fa-clock text-info fa-2x mb-2"></i>
-                    <h5 class="fw-bold">{% if aparelhos %}{{ aparelhos|selectattr('status', 'equalto', true)|list|length }}{% else %}3{% endif %}</h5>
+                <div class="glass text-center p-4">
+                    <i class="fas fa-clock text-info fa-2x mb-3"></i>
+                    <h5 class="fw-bold mb-2">{% if aparelhos %}{{ aparelhos|selectattr('status', 'equalto', true)|list|length }}{% else %}3{% endif %}</h5>
                     <small class="text-muted">Ativos Agora</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="glass text-center">
-                    <i class="fas fa-dollar-sign text-danger fa-2x mb-2"></i>
-                    <h5 class="fw-bold">R$ {% if aparelhos %}{{ "%.2f"|format((aparelhos|sum(attribute='consumo')) * 0.75) }}{% else %}9.38{% endif %}</h5>
+                <div class="glass text-center p-4">
+                    <i class="fas fa-dollar-sign text-danger fa-2x mb-3"></i>
+                    <h5 class="fw-bold mb-2">R$ {% if aparelhos %}{{ "%.2f"|format((aparelhos|sum(attribute='consumo')) * 0.75) }}{% else %}9.38{% endif %}</h5>
                     <small class="text-muted">Custo Estimado</small>
                 </div>
             </div>
         </div>
 
         <!-- Lista de Aparelhos -->
-        <div class="glass">
+        <div class="glass p-4">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h4 class="fw-bold mb-0" style="color:#FE5800;">
                     <i class="fas fa-list-alt me-2"></i>Lista de Aparelhos
@@ -186,33 +187,37 @@
         </div>
 
         <!-- Gráfico de Consumo por Aparelho -->
-        <div class="glass mt-4">
-            <h4 class="fw-bold mb-4" style="color:#FE5800;">
-                <i class="fas fa-chart-pie me-2"></i>Distribuição de Consumo
+        <div class="glass mt-4 p-5">
+            <h4 class="fw-bold mb-5" style="color:#FE5800;">
+                <i class="fas fa-chart-pie me-3"></i>Distribuição de Consumo
             </h4>
-            <div class="row">
+            <div class="row g-4">
                 <div class="col-md-6">
-                    <canvas id="consumoChart" width="400" height="300"></canvas>
+                    <div class="p-3">
+                        <canvas id="consumoChart" width="400" height="300"></canvas>
+                    </div>
                 </div>
                 <div class="col-md-6">
-                    <h5 class="text-white mb-3">Resumo Energético</h5>
-                    <div class="energy-summary">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Maior Consumidor:</span>
-                            <span class="text-warning fw-bold">Ar Condicionado (3.2 kWh)</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Mais Eficiente:</span>
-                            <span class="text-success fw-bold">Smart TV (0.15 kWh)</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Economia Possível:</span>
-                            <span class="text-info fw-bold">R$ 2.45/dia</span>
-                        </div>
-                        <hr class="border-secondary">
-                        <div class="d-flex justify-content-between">
-                            <span class="fw-bold">Total Hoje:</span>
-                            <span class="text-primary fw-bold">12.5 kWh (R$ 9.38)</span>
+                    <div class="p-3">
+                        <h5 class="text-white mb-4">Resumo Energético</h5>
+                        <div class="energy-summary">
+                            <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
+                                <span>Maior Consumidor:</span>
+                                <span class="text-warning fw-bold">Ar Condicionado (3.2 kWh)</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
+                                <span>Mais Eficiente:</span>
+                                <span class="text-success fw-bold">Smart TV (0.15 kWh)</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
+                                <span>Economia Possível:</span>
+                                <span class="text-info fw-bold">R$ 2.45/dia</span>
+                            </div>
+                            <hr class="border-secondary my-3">
+                            <div class="d-flex justify-content-between p-3 rounded" style="background: rgba(254,88,0,0.1); border: 1px solid rgba(254,88,0,0.3);">
+                                <span class="fw-bold">Total Hoje:</span>
+                                <span class="text-primary fw-bold">12.5 kWh (R$ 9.38)</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -231,13 +236,13 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <form action="/aparelhos/adicionar" method="POST">
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label text-white">Nome do Aparelho</label>
                         <input type="text" name="nome" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Televisão da Sala" required>
                     </div>
-                    <div class="row mb-3">
+                    <div class="row mb-4">
                         <div class="col-md-6">
                             <label class="form-label text-white">Tipo</label>
                             <select class="form-select bg-dark text-white border-secondary" name="tipo">
@@ -257,11 +262,11 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label text-white">Consumo Estimado (kWh/dia)</label>
                         <input type="number" name="consumo" step="0.01" class="form-control bg-dark text-white border-secondary" placeholder="0.00" required>
                     </div>
-                    <div class="modal-footer border-secondary">
+                    <div class="modal-footer border-secondary p-4">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-2"></i>Adicionar Aparelho
@@ -283,14 +288,14 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <form action="/aparelhos/editar" method="POST">
                     <input type="hidden" name="id" id="editDeviceId">
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label text-white">Nome do Aparelho</label>
                         <input type="text" name="nome" id="editDeviceName" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Televisão da Sala" required>
                     </div>
-                    <div class="row mb-3">
+                    <div class="row mb-4">
                         <div class="col-md-6">
                             <label class="form-label text-white">Tipo</label>
                             <select class="form-select bg-dark text-white border-secondary" name="tipo" id="editDeviceType">
@@ -310,11 +315,11 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label text-white">Consumo Estimado (kWh/dia)</label>
                         <input type="number" name="consumo" id="editDeviceConsumption" step="0.01" class="form-control bg-dark text-white border-secondary" placeholder="0.00" required>
                     </div>
-                    <div class="modal-footer border-secondary">
+                    <div class="modal-footer border-secondary p-4">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-2"></i>Salvar Alterações
@@ -399,4 +404,5 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('editDeviceConsumption').value = deviceData.consumo;
   });
 </script>
+</div> <!-- fecha container-fluid -->
 {% endblock %}

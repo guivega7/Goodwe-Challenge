@@ -71,7 +71,7 @@ def gemini_test():
         }), 500
 
 
-@api_bp.route('/api/ia/insights', methods=['POST'])
+@api_bp.route('/api/insights', methods=['POST'])
 @login_required
 def gerar_insights():
     """
@@ -81,7 +81,6 @@ def gerar_insights():
         energia_gerada: float (kWh)
         energia_consumida: float (kWh) 
         soc_bateria: float (0-100)
-        periodo: str (opcional, default: "hoje")
     """
     try:
         data = request.get_json() or {}
@@ -89,21 +88,20 @@ def gerar_insights():
         energia_gerada = float(data.get('energia_gerada', 0))
         energia_consumida = float(data.get('energia_consumida', 0))
         soc_bateria = float(data.get('soc_bateria', 0))
-        periodo = data.get('periodo', 'hoje')
         
-        insights = gemini_client.generate_insights(
-            energia_gerada, energia_consumida, soc_bateria, periodo
-        )
+        # Usa os dados para gerar insights
+        insights_data = {
+            'energia_gerada': energia_gerada,
+            'energia_consumida': energia_consumida,
+            'soc_bateria': soc_bateria
+        }
+        
+        insights = gemini_client.generate_insights(insights_data)
         
         return jsonify({
             'status': 'sucesso',
             'insights': insights,
-            'dados': {
-                'energia_gerada': energia_gerada,
-                'energia_consumida': energia_consumida,
-                'soc_bateria': soc_bateria,
-                'periodo': periodo
-            },
+            'dados': insights_data,
             'timestamp': datetime.now().isoformat()
         })
         
