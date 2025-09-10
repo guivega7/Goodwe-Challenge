@@ -3,11 +3,13 @@ from services.energy_autopilot import build_daily_plan
 from services.goodwe_client import GoodWeClient
 from services.simula_evento import get_mock_event, dispara_alerta
 from routes.auth import login_required
+from utils.logger import get_logger
 from datetime import datetime
 import os
 import json
 
 dash_bp = Blueprint('dash', __name__)
+logger = get_logger(__name__)
 
 def _extract_latest_value(resp):
     """
@@ -66,7 +68,7 @@ def autopilot():
     plan = build_daily_plan(soc, forecast)
     return render_template('autopilot.html', plan=plan)
 
-@dash_bp.route('/dashboard')
+@dash_bp.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
     """Rota principal do dashboard com integração GoodWe SEMS API"""
@@ -117,7 +119,7 @@ def dashboard():
             print(f"📍 Login region: {login_region.upper()}, Data region: {data_region.upper()}")
             
             # Faz login na região especificada
-            token = client.crosslogin(account, password, login_region)
+            token = client.crosslogin(account, password)
             if token:
                 print(f"✅ Login bem-sucedido no servidor {login_region.upper()}!")
                 print(f"📊 Buscando dados no servidor {data_region.upper()}...")
@@ -141,7 +143,37 @@ def dashboard():
         
         # Buscar dados em tempo real para colunas chave (sem fallback mock para validação)
         columns = ['Pac', 'Eday', 'Cbattery1']
-        series_data = client.get_columns_series(token, inv_id, columns, date, region=data_region, allow_mock=False)
+        series_data = client.get_multiple_columns_data(token, inv_id, columns, date, use_mock_data=False)
+        
+        # Se não encontrou dados, tentar descobrir inversores disponíveis
+        if not any(series_data.get(col) for col in columns):
+            logger.info("Não encontrou dados para o SN fornecido. Tentando descobrir inversores disponíveis...")
+            print(f"🔍 Tentando descobrir inversores disponíveis para conta autenticada...")
+            user_equipment = client.get_user_stations_and_inverters(token)
+            
+            if user_equipment['has_access'] and user_equipment['inverters']:
+                available_inverters = user_equipment['inverters']
+                logger.info(f"Inversores disponíveis encontrados: {available_inverters}")
+                
+                # Tentar usar o primeiro inversor disponível
+                if available_inverters:
+                    auto_inv_id = available_inverters[0]
+                    print(f"🔄 Tentando inversor encontrado automaticamente: {auto_inv_id}")
+                    series_data = client.get_multiple_columns_data(token, auto_inv_id, columns, date, use_mock_data=False)
+                    
+                    if any(series_data.get(col) for col in columns):
+                        print(f"✅ Sucesso com inversor: {auto_inv_id}")
+                        inv_id = auto_inv_id  # Atualizar o ID usado
+                        flash(f"SN '{sn_usuario or inv_id}' não encontrado. Usando inversor disponível: {auto_inv_id}", "info")
+                    else:
+                        print(f"❌ Falha mesmo com inversor encontrado: {auto_inv_id}")
+                        flash(f"Nenhum inversor acessível encontrado. Inversores disponíveis: {', '.join(available_inverters[:3])}", "warning")
+                else:
+                    flash("Conta autenticada mas nenhum inversor encontrado.", "warning")
+            else:
+                error_msg = '; '.join(user_equipment['errors'][:3]) if user_equipment['errors'] else "Sem acesso ou equipamentos"
+                print(f"❌ Erro ao descobrir inversores: {error_msg}")
+                flash(f"Não foi possível acessar inversores. Erro: {error_msg}", "error")
         
         # Verificar detalhes do erro para determinar o tipo de problema
         error_details = series_data.get('_error_details', {})

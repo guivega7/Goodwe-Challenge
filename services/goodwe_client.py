@@ -470,3 +470,88 @@ class GoodWeClient:
         except Exception as e:
             logger.error(f"Error getting station list: {e}")
             return None
+
+    def get_user_stations_and_inverters(self, token: str) -> Dict:
+        """
+        Get comprehensive list of user's stations and inverters.
+        
+        Args:
+            token: Authentication token
+            
+        Returns:
+            dict: Contains stations, inverters and any errors
+        """
+        result = {
+            'stations': [],
+            'inverters': [],
+            'errors': [],
+            'has_access': False
+        }
+        
+        # Try multiple endpoints to find user's equipment
+        endpoints_to_try = [
+            ("PowerStation/GetPowerstationListByIndex", {}),
+            ("PowerStationMonitor/GetPowerstationList", {}),
+            ("Common/GetUserInfo", {}),
+        ]
+        
+        for endpoint, payload in endpoints_to_try:
+            try:
+                url = f"{self._get_base_url()}{endpoint}"
+                headers = {
+                    "Token": token,
+                    "Content-Type": "application/json",
+                }
+                
+                logger.info(f"Trying endpoint: {endpoint}")
+                
+                response = self.session.post(
+                    url, 
+                    json=payload,
+                    headers=headers, 
+                    timeout=self.REQUEST_TIMEOUT
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('code') == 10000:  # Success code
+                        result['has_access'] = True
+                        response_data = data.get('data', {})
+                        
+                        # Extract station information
+                        if isinstance(response_data, list):
+                            result['stations'].extend(response_data)
+                        elif isinstance(response_data, dict):
+                            if 'list' in response_data:
+                                result['stations'].extend(response_data['list'])
+                            elif 'stations' in response_data:
+                                result['stations'].extend(response_data['stations'])
+                                
+                        logger.info(f"Found {len(result['stations'])} stations from {endpoint}")
+                        break
+                    else:
+                        result['errors'].append(f"{endpoint}: {data.get('msg', 'Unknown error')}")
+                else:
+                    result['errors'].append(f"{endpoint}: HTTP {response.status_code}")
+                    
+            except Exception as e:
+                result['errors'].append(f"{endpoint}: {str(e)}")
+                logger.error(f"Error with {endpoint}: {e}")
+        
+        # Extract inverter IDs from stations
+        for station in result['stations']:
+            if isinstance(station, dict):
+                # Look for inverter information in various fields
+                inverter_fields = ['inverter_sn', 'sn', 'deviceSN', 'inverters']
+                for field in inverter_fields:
+                    if field in station and station[field]:
+                        if isinstance(station[field], list):
+                            result['inverters'].extend(station[field])
+                        else:
+                            result['inverters'].append(station[field])
+        
+        # Remove duplicates
+        result['inverters'] = list(set(result['inverters']))
+        
+        logger.info(f"Total found: {len(result['stations'])} stations, {len(result['inverters'])} inverters")
+        return result
