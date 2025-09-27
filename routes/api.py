@@ -13,6 +13,10 @@ import random
 import os
 from datetime import datetime
 from flask import Blueprint, jsonify, request
+import asyncio
+import base64
+import json
+import requests
 
 from extensions import db
 from models.aparelho import Aparelho
@@ -23,11 +27,21 @@ from utils.logger import get_logger
 from routes.auth import login_required
 from services.scheduler import get_jobs_info
 from services.gemini_client import gemini_client
+from services.goodwe_client import GoodWeClient
 
 logger = get_logger(__name__)
 
 api_bp = Blueprint('api', __name__)
 
+BASE_SEMS = {
+    "us": "https://us.semsportal.com",
+    "eu": "https://eu.semsportal.com",
+}
+
+def _initial_token_prof():
+    original = {"uid": "", "timestamp": 0, "token": "", "client": "web", "version": "", "language": "en"}
+    b = json.dumps(original).encode("utf-8")
+    return base64.b64encode(b).decode("utf-8")
 
 @api_bp.route('/api/status')
 def status():
@@ -866,3 +880,181 @@ def autopilot_announce():
     except Exception as e:
         logger.error(f"Erro no announce do Autopilot: {e}")
         return jsonify({'status': 'erro', 'mensagem': f'Erro interno: {str(e)}'}), 500
+
+
+@api_bp.route('/api/goodwe/local', methods=['GET'])
+def goodwe_local():
+    """
+    Endpoint para buscar dados do inversor GoodWe via rede local usando a biblioteca goodwe.
+    Parâmetros:
+        ip (str): IP do inversor na rede local
+    Retorna:
+        JSON: Dados de sensores do inversor ou erro
+    """
+    ip = request.args.get('ip')
+    if not ip:
+        return jsonify({'ok': False, 'msg': 'Parâmetro ?ip= obrigatório'}), 400
+    try:
+        import goodwe
+        async def get_data():
+            inverter = await goodwe.connect(ip)
+            runtime_data = await inverter.read_runtime_data()
+            sensors = [
+                {'id': s.id_, 'name': s.name, 'unit': s.unit, 'value': runtime_data.get(s.id_)}
+                for s in inverter.sensors() if s.id_ in runtime_data
+            ]
+            return sensors
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        sensors = loop.run_until_complete(get_data())
+        return jsonify({'ok': True, 'sensors': sensors})
+    except Exception as e:
+        logger.error(f'Erro ao acessar GoodWe local: {e}')
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@api_bp.route('/api/goodwe/demo/login', methods=['GET'])
+def goodwe_demo_login():
+    """
+    Testa login no SEMS Portal usando variáveis do .env (conta demo ou real).
+    Retorna token se sucesso, erro caso contrário.
+    """
+    account = os.environ.get('SEMS_ACCOUNT')
+    password = os.environ.get('SEMS_PASSWORD')
+    region = os.environ.get('SEMS_LOGIN_REGION', 'us')
+    if not account or not region:
+        return jsonify({'ok': False, 'msg': 'Configure SEMS_ACCOUNT e SEMS_LOGIN_REGION no .env'}), 400
+    try:
+        client = GoodWeClient(region=region)
+        token = client.crosslogin(account, password)
+        if token:
+            return jsonify({'ok': True, 'token': token})
+        else:
+            return jsonify({'ok': False, 'msg': 'Falha no login SEMS'}), 401
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@api_bp.route('/api/goodwe/demo/inverters', methods=['GET'])
+def goodwe_demo_inverters():
+    """
+    Lista estações e inversores disponíveis na conta SEMS demo/configurada.
+    """
+    account = os.environ.get('SEMS_ACCOUNT')
+    password = os.environ.get('SEMS_PASSWORD')
+    region = os.environ.get('SEMS_LOGIN_REGION', 'us')
+    if not account or not region:
+        return jsonify({'ok': False, 'msg': 'Configure SEMS_ACCOUNT e SEMS_LOGIN_REGION no .env'}), 400
+    try:
+        client = GoodWeClient(region=region)
+        token = client.crosslogin(account, password)
+        if not token:
+            return jsonify({'ok': False, 'msg': 'Falha no login SEMS'}), 401
+        result = client.get_user_stations_and_inverters(token)
+        return jsonify({'ok': True, 'result': result})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@api_bp.route('/api/goodwe/demo/inverter_data', methods=['GET'])
+def goodwe_demo_inverter_data():
+    """
+    Retorna dados simulados ou reais do inversor demo/configurado (coluna Pac, Eday, Cbattery1).
+    Parâmetros opcionais: column (default: Pac), date (YYYY-MM-DD, default: hoje)
+    """
+    account = os.environ.get('SEMS_ACCOUNT')
+    password = os.environ.get('SEMS_PASSWORD')
+    region = os.environ.get('SEMS_LOGIN_REGION', 'us')
+    inverter_id = os.environ.get('SEMS_INV_ID')
+    column = request.args.get('column', 'Pac')
+    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    if not account or not region or not inverter_id:
+        return jsonify({'ok': False, 'msg': 'Configure SEMS_ACCOUNT, SEMS_LOGIN_REGION e SEMS_INV_ID no .env'}), 400
+    try:
+        client = GoodWeClient(region=region)
+        token = client.crosslogin(account, password)
+        if not token:
+            return jsonify({'ok': False, 'msg': 'Falha no login SEMS'}), 401
+        data = client.get_inverter_data_by_column(token, inverter_id, column, date)
+        return jsonify({'ok': True, 'data': data})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@api_bp.route('/api/sems/login', methods=['POST'])
+def sems_login():
+    """
+    Faz login no SEMS Portal e retorna o token pós-login (exemplo do professor).
+    Espera JSON: {"account": ..., "password": ..., "region": "us" ou "eu"}
+    Se não enviar, usa variáveis do .env.
+    """
+    data = request.get_json(silent=True) or {}
+    account = data.get('account') or os.environ.get('SEMS_ACCOUNT')
+    password = data.get('password') or os.environ.get('SEMS_PASSWORD')
+    region = data.get('region') or os.environ.get('SEMS_LOGIN_REGION', 'us')
+    if not account or not password:
+        return jsonify({'ok': False, 'msg': 'Informe account e password (ou preencha no .env)'}), 400
+    try:
+        url = f"{BASE_SEMS[region]}/api/v2/common/crosslogin"
+        headers = {"Token": _initial_token_prof(), "Content-Type": "application/json", "Accept": "*/*"}
+        payload = {
+            "account": account,
+            "pwd": password,
+            "agreement_agreement": 0,
+            "is_local": False
+        }
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
+        r.raise_for_status()
+        js = r.json()
+        if "data" not in js or js.get("code") not in (0, 1, 200):
+            return jsonify({'ok': False, 'msg': f'Login falhou: {js}'}), 401
+        data_to_string = json.dumps(js["data"])
+        token = base64.b64encode(data_to_string.encode("utf-8")).decode("utf-8")
+        return jsonify({'ok': True, 'token': token, 'raw': js["data"]})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+@api_bp.route('/api/sems/inverter_data', methods=['POST'])
+def sems_inverter_data():
+    """
+    Busca dados do inversor via SEMS (exemplo do professor).
+    Espera JSON: {"token": ..., "inv_id": ..., "column": ..., "date": ..., "region": ...}
+    Se não enviar, usa variáveis do .env e data atual.
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get('token')
+    inv_id = data.get('inv_id') or os.environ.get('SEMS_INV_ID')
+    column = data.get('column', 'Pac')
+    date = data.get('date', datetime.now().strftime('%Y-%m-%d 00:00:00'))
+    region = data.get('region') or os.environ.get('SEMS_DATA_REGION', 'eu')
+    if not token:
+        # tenta login automático
+        account = os.environ.get('SEMS_ACCOUNT')
+        password = os.environ.get('SEMS_PASSWORD')
+        login_region = os.environ.get('SEMS_LOGIN_REGION', 'us')
+        if not account or not password:
+            return jsonify({'ok': False, 'msg': 'Informe token ou preencha SEMS_ACCOUNT/SEMS_PASSWORD no .env'}), 400
+        try:
+            url_login = f"{BASE_SEMS[login_region]}/api/v2/common/crosslogin"
+            headers_login = {"Token": _initial_token_prof(), "Content-Type": "application/json", "Accept": "*/*"}
+            payload_login = {"account": account, "pwd": password, "agreement_agreement": 0, "is_local": False}
+            r_login = requests.post(url_login, json=payload_login, headers=headers_login, timeout=20)
+            r_login.raise_for_status()
+            js_login = r_login.json()
+            if "data" not in js_login or js_login.get("code") not in (0, 1, 200):
+                return jsonify({'ok': False, 'msg': f'Login falhou: {js_login}'}), 401
+            data_to_string = json.dumps(js_login["data"])
+            token = base64.b64encode(data_to_string.encode("utf-8")).decode("utf-8")
+        except Exception as e:
+            return jsonify({'ok': False, 'msg': f'Login automático falhou: {e}'}), 500
+    if not inv_id:
+        return jsonify({'ok': False, 'msg': 'Informe inv_id (serial do inversor) ou preencha SEMS_INV_ID no .env'}), 400
+    try:
+        url = f"{BASE_SEMS[region]}/api/PowerStationMonitor/GetInverterDataByColumn"
+        headers = {"Token": token, "Content-Type": "application/json", "Accept": "*/*"}
+        payload = {"date": date, "column": column, "id": inv_id}
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
+        r.raise_for_status()
+        return jsonify({'ok': True, 'data': r.json()})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500

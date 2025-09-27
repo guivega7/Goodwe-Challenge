@@ -75,7 +75,6 @@ def dashboard():
     
     # Pegar preferencia do usuario entre API ou mock
     fonte_escolhida = request.args.get('fonte', 'mock')  # 'mock' ou 'api'
-    sn_usuario = request.args.get('sn', '').strip()
     
     # Force mock mode if user chose it
     if fonte_escolhida == 'mock':
@@ -131,13 +130,9 @@ def dashboard():
             token = os.environ.get('SEMS_TOKEN', 'BAC20C32-B5D2-4894-AECB-D9799987ADD9')
             data_region = os.environ.get('SEMS_DATA_REGION', 'eu')
         
-        # Usar SN fornecido pelo usuário se disponível, caso contrário usar padrão do ambiente
-        if sn_usuario:
-            inv_id = sn_usuario
-            print(f"🔍 Usando SN fornecido pelo usuário: {inv_id}")
-        else:
-            inv_id = os.environ.get('SEMS_INV_ID', 'DEMO_INVERTER_123')
-            print(f"🔍 Usando SN padrão: {inv_id}")
+        # Usar SN do .env SEMPRE
+        inv_id = os.environ.get('SEMS_INV_ID', 'DEMO_INVERTER_123')
+        print(f"🔍 Usando SN do .env: {inv_id}")
         
         date = datetime.now().strftime('%Y-%m-%d')
         
@@ -148,109 +143,7 @@ def dashboard():
         # Se não encontrou dados, tentar descobrir inversores disponíveis
         if not any(series_data.get(col) for col in columns):
             logger.info("Não encontrou dados para o SN fornecido. Tentando descobrir inversores disponíveis...")
-            print(f"🔍 Tentando descobrir inversores disponíveis para conta autenticada...")
-            user_equipment = client.get_user_stations_and_inverters(token)
-            
-            if user_equipment['has_access'] and user_equipment['inverters']:
-                available_inverters = user_equipment['inverters']
-                logger.info(f"Inversores disponíveis encontrados: {available_inverters}")
-                
-                # Tentar usar o primeiro inversor disponível
-                if available_inverters:
-                    auto_inv_id = available_inverters[0]
-                    print(f"🔄 Tentando inversor encontrado automaticamente: {auto_inv_id}")
-                    series_data = client.get_multiple_columns_data(token, auto_inv_id, columns, date, use_mock_data=False)
-                    
-                    if any(series_data.get(col) for col in columns):
-                        print(f"✅ Sucesso com inversor: {auto_inv_id}")
-                        inv_id = auto_inv_id  # Atualizar o ID usado
-                        flash(f"SN '{sn_usuario or inv_id}' não encontrado. Usando inversor disponível: {auto_inv_id}", "info")
-                    else:
-                        print(f"❌ Falha mesmo com inversor encontrado: {auto_inv_id}")
-                        flash(f"Nenhum inversor acessível encontrado. Inversores disponíveis: {', '.join(available_inverters[:3])}", "warning")
-                else:
-                    flash("Conta autenticada mas nenhum inversor encontrado.", "warning")
-            else:
-                error_msg = '; '.join(user_equipment['errors'][:3]) if user_equipment['errors'] else "Sem acesso ou equipamentos"
-                print(f"❌ Erro ao descobrir inversores: {error_msg}")
-                flash(f"Não foi possível acessar inversores. Erro: {error_msg}", "error")
-        
-        # Verificar detalhes do erro para determinar o tipo de problema
-        error_details = series_data.get('_error_details', {})
-        has_any_data = any(series_data.get(col) for col in columns)
-        
-        # Detecção inteligente: Verifica se SN segue padrões GoodWe
-        def is_likely_valid_sn(sn):
-            """Verifica se SN corresponde a padrões conhecidos do GoodWe"""
-            import re
-            # Padrões comuns do GoodWe (baseados em exemplos da documentação)
-            patterns = [
-                r'^[0-9]{5}[A-Z]{2,3}[0-9]{3,4}[A-Z]{2}[0-9]{3}$',  # padrão 75000ESN333WV001
-                r'^[A-Z]{2}[0-9]{8,12}$',                           # outros padrões comuns
-                r'^[0-9]{8,15}$',                                    # apenas numérico
-                r'^GW[0-9A-Z]{8,15}$',                              # prefixo GW
-            ]
-            return any(re.match(pattern, sn.upper()) for pattern in patterns)
-        
-        # Determinar se é erro de "Sem acesso" (SN válido) ou SN inválido
-        is_access_error = any("No access" in str(msg) or "log in" in str(msg) for msg in error_details.values())
-        looks_like_valid_sn = is_likely_valid_sn(inv_id)
-        
-        if not has_any_data:
-            if is_access_error and looks_like_valid_sn:
-                # Padrão de SN válido mas sem acesso - usar dados simulados com mensagem apropriada
-                print(f"⚠️ SN válido mas sem acesso: {inv_id}. Usando dados simulados.")
-                flash(f"SN '{inv_id}' reconhecido, mas sem acesso à API. Exibindo dados simulados.", "warning")
-                
-                # Obter dados simulados mas indicar que é para um inversor real
-                mock = get_mock_event()
-                relatorio = {
-                    'potencia_atual': mock.get("geracao", 3.2),
-                    'energia_hoje': 8.5,
-                    'soc_bateria': 75.0,
-                    'co2_evitado': 4.25,
-                    'economia_hoje': 6.38,
-                    'historico_7dias': [
-                        {'data': '20/08', 'energia': 8.1},
-                        {'data': '21/08', 'energia': 9.2},
-                        {'data': '22/08', 'energia': 7.8},
-                        {'data': '23/08', 'energia': 8.7},
-                        {'data': '24/08', 'energia': 8.9},
-                        {'data': '25/08', 'energia': 8.3},
-                        {'data': '26/08', 'energia': 8.5}
-                    ],
-                    'status': 'online',
-                    'data_update': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                    'fonte_dados': f'📊 Dados Simulados para SN: {inv_id} (sem acesso à API)'
-                }
-                return render_template('dashboard.html', relatorio=relatorio, data={}, timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            else:
-                # Padrão de SN inválido
-                print(f"❌ SN inválido: {inv_id}")
-                flash(f"Número de série '{inv_id}' não segue o padrão GoodWe. Verifique o formato.", "error")
-                
-                # Retornar dashboard vazio com mensagem de erro
-                relatorio = {
-                    'potencia_atual': 0.0,
-                    'energia_hoje': 0.0,
-                    'soc_bateria': 0.0,
-                    'co2_evitado': 0.0,
-                    'economia_hoje': 0.0,
-                    'historico_7dias': [
-                        {'data': '20/08', 'energia': 0.0},
-                        {'data': '21/08', 'energia': 0.0},
-                        {'data': '22/08', 'energia': 0.0},
-                        {'data': '23/08', 'energia': 0.0},
-                        {'data': '24/08', 'energia': 0.0},
-                        {'data': '25/08', 'energia': 0.0},
-                        {'data': '26/08', 'energia': 0.0}
-                    ],
-                    'status': 'offline',
-                    'data_update': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                    'fonte_dados': f'❌ Formato de SN inválido: {inv_id}'
-                }
-                return render_template('dashboard.html', relatorio=relatorio, data={}, timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        
+            return render_template('dashboard.html', relatorio=relatorio, data={}, timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         
         # Extrair valores atuais para KPIs
         potencia_atual = 0.0

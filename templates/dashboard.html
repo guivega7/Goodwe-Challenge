@@ -311,6 +311,46 @@
   </div>
 </div>
 
+<!-- Dados da API SEMS -->
+{% if request.args.get('fonte') == 'api' and data and (data['Cbattery1'] or data['Pac'] or data['Eday']) %}
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="glass p-4">
+      <div class="d-flex align-items-center mb-3">
+        <i class="fa-solid fa-database fa-2x me-3" style="color:#FE5800;"></i>
+        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Dados da API SEMS (GoodWe)</h5>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-dark table-striped table-bordered align-middle">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Cbattery1 (%)</th>
+              <th>Pac (kW)</th>
+              <th>Eday (kWh)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set max_len = [data['Cbattery1']|length if data['Cbattery1'] else 0, data['Pac']|length if data['Pac'] else 0, data['Eday']|length if data['Eday'] else 0]|max %}
+            {% for i in range(max_len) %}
+            <tr>
+              <td>{{ data['Cbattery1'][i][0] if data['Cbattery1'] and i < data['Cbattery1']|length else (data['Pac'][i][0] if data['Pac'] and i < data['Pac']|length else (data['Eday'][i][0] if data['Eday'] and i < data['Eday']|length else '')) }}</td>
+              <td>{{ data['Cbattery1'][i][1] if data['Cbattery1'] and i < data['Cbattery1']|length else '-' }}</td>
+              <td>{{ data['Pac'][i][1] if data['Pac'] and i < data['Pac']|length else '-' }}</td>
+              <td>{{ data['Eday'][i][1] if data['Eday'] and i < data['Eday']|length else '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="text-end text-light small mt-2">
+        Fonte: GoodWe SEMS API | SN: <b>{{ request.args.get('sn', relatorio.fonte_dados.split(':')[-1]|trim) }}</b>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Gráficos Combinados -->
 <div class="row g-4 mb-4">
   <!-- Gráfico Histórico 7 Dias -->
@@ -380,20 +420,13 @@
         <div class="row g-3">
           <div class="col-md-6">
             <label for="fonte" class="form-label text-light">Fonte de Dados</label>
-            <select class="form-select" name="fonte" id="fonte" onchange="toggleSnInput()">
+            <select class="form-select" name="fonte" id="fonte">
               <option value="mock" {% if request.args.get('fonte', 'mock') == 'mock' %}selected{% endif %}>Dados Simulados</option>
               <option value="api" {% if request.args.get('fonte') == 'api' %}selected{% endif %}>API Real (SEMS)</option>
             </select>
           </div>
-          
-          <div class="col-md-6" id="snContainer" style="{% if request.args.get('fonte', 'mock') == 'mock' %}display:none;{% endif %}">
-            <label for="sn" class="form-label text-light">Serial Number (SN)</label>
-            <input type="text" class="form-control" name="sn" id="sn" 
-                   value="{{ request.args.get('sn', '') }}" 
-                   placeholder="Digite o SN do seu inversor">
-          </div>
+          <!-- Campo de SN removido -->
         </div>
-        
         <div class="mt-3">
           <button type="submit" class="btn btn-warning me-2">
             <i class="fa-solid fa-sync-alt me-2"></i>Atualizar Dados
