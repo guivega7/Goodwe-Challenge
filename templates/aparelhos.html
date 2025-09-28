@@ -102,9 +102,22 @@
                 <h4 class="fw-bold mb-0" style="color:#FE5800;">
                     <i class="fas fa-list-alt me-2"></i>Lista de Aparelhos
                 </h4>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDeviceModal">
-                    <i class="fas fa-plus me-2"></i>Adicionar Aparelho
-                </button>
+                <div class="d-flex gap-2">
+                    <form action="/aparelhos/sincronizar-tuya" method="POST" class="me-2 d-flex align-items-center gap-1">
+                        {% if tuya_device_id %}
+                        <input type="hidden" name="device_id" value="{{ tuya_device_id }}" />
+                        {% endif %}
+                        <button class="btn btn-outline-info" type="submit" title="Sincroniza o dispositivo Tuya configurado">
+                            <i class="fas fa-sync-alt me-1"></i> Sincronizar Tuya
+                        </button>
+                        {% if not tuya_device_id %}
+                        <small class="text-muted">Defina TUYA_DEVICE_ID no .env</small>
+                        {% endif %}
+                    </form>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDeviceModal">
+                        <i class="fas fa-plus me-2"></i>Adicionar Aparelho
+                    </button>
+                </div>
             </div>
 
             {% if aparelhos|length > 0 %}
@@ -122,27 +135,37 @@
                     </thead>
                     <tbody>
                         {% for aparelho in aparelhos %}
-                        <tr>
+                        <tr data-device-id="{{ aparelho.id }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     <i class="fas fa-plug me-2 text-warning"></i>
                                     <div>
                                         <strong>{{ aparelho.nome }}</strong>
+                                        {% if aparelho.origem == 'tuya' %}
+                                            <span class="badge bg-info ms-1" title="Dispositivo sincronizado da Tuya">Tuya</span>
+                                        {% elif aparelho.origem == 'manual' %}
+                                            <span class="badge bg-secondary ms-1" title="Cadastrado manualmente">Manual</span>
+                                        {% elif aparelho.origem %}
+                                            <span class="badge bg-dark ms-1">{{ aparelho.origem }}</span>
+                                        {% endif %}
                                         <br><small class="text-muted">Eletrônico</small>
                                     </div>
                                 </div>
                             </td>
                             <td>
-                                <span class="badge bg-info">{{ "%.2f"|format(aparelho.consumo) }} kWh</span>
-                                <br><small class="text-muted">~R$ {{ "%.2f"|format(aparelho.consumo * 0.75) }}</small>
+                                <span class="badge bg-info consumo-kwh">{{ "%.2f"|format(aparelho.consumo) }} kWh</span>
+                                <div class="small mt-1">
+                                    <span class="badge bg-secondary consumo-w" style="font-weight: normal;">-- W</span>
+                                </div>
+                                <br><small class="text-muted custo-aprox">~R$ {{ "%.2f"|format(aparelho.consumo * 0.75) }}</small>
                             </td>
                             <td>
                                 {% if aparelho.status %}
-                                    <span class="badge bg-success">
+                                    <span class="badge bg-success status-badge">
                                         <i class="fas fa-check-circle me-1"></i>Ativo
                                     </span>
                                 {% else %}
-                                    <span class="badge bg-secondary">
+                                    <span class="badge bg-secondary status-badge">
                                         <i class="fas fa-pause-circle me-1"></i>Inativo
                                     </span>
                                 {% endif %}
@@ -167,6 +190,16 @@
                                 <button class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#editDeviceModal" data-id="{{ aparelho.id }}">
                                     <i class="fas fa-edit"></i> Editar
                                 </button>
+                                {% if aparelho.origem == 'tuya' and aparelho.codigo_externo %}
+                                <div class="btn-group btn-group-sm me-2" role="group">
+                                    <button class="btn btn-outline-success toggle-tuya" data-action="on" data-ext="{{ aparelho.codigo_externo }}">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger toggle-tuya" data-action="off" data-ext="{{ aparelho.codigo_externo }}">
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
                                 <form action="/aparelhos/remover" method="POST" style="display: inline;">
                                     <input type="hidden" name="id" value="{{ aparelho.id }}">
                                     <button type="submit" class="btn btn-danger btn-sm">
@@ -201,23 +234,29 @@
                     <div class="p-3">
                         <h5 class="text-white mb-4">Resumo Energético</h5>
                         <div class="energy-summary">
+                            {% if resumo_energetico and resumo_energetico.maior_consumidor %}
                             <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
                                 <span>Maior Consumidor:</span>
-                                <span class="text-warning fw-bold">Ar Condicionado (3.2 kWh)</span>
+                                <span class="text-warning fw-bold">{{ resumo_energetico.maior_consumidor.nome }} ({{ "%.2f"|format(resumo_energetico.maior_consumidor.consumo) }} kWh)</span>
                             </div>
                             <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
                                 <span>Mais Eficiente:</span>
-                                <span class="text-success fw-bold">Smart TV (0.15 kWh)</span>
+                                <span class="text-success fw-bold">{{ resumo_energetico.mais_eficiente.nome }} ({{ "%.2f"|format(resumo_energetico.mais_eficiente.consumo) }} kWh)</span>
                             </div>
                             <div class="d-flex justify-content-between mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05);">
                                 <span>Economia Possível:</span>
-                                <span class="text-info fw-bold">R$ 2.45/dia</span>
+                                <span class="text-info fw-bold">R$ {{ "%.2f"|format(resumo_energetico.economia_possivel) }}/dia</span>
                             </div>
                             <hr class="border-secondary my-3">
                             <div class="d-flex justify-content-between p-3 rounded" style="background: rgba(254,88,0,0.1); border: 1px solid rgba(254,88,0,0.3);">
                                 <span class="fw-bold">Total Hoje:</span>
-                                <span class="text-primary fw-bold">12.5 kWh (R$ 9.38)</span>
+                                <span class="text-primary fw-bold">{{ "%.2f"|format(resumo_energetico.total_consumo_kwh) }} kWh (R$ {{ "%.2f"|format(resumo_energetico.custo_total_reais) }})</span>
                             </div>
+                            {% else %}
+                            <div class="alert alert-secondary">
+                                Sem dados para exibir o resumo. Adicione aparelhos.
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -403,6 +442,78 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('editDevicePriority').value = deviceData.prioridade;
     document.getElementById('editDeviceConsumption').value = deviceData.consumo;
   });
+
+    // -------- Atualização periódica de consumo (estimado / tempo real futuramente) -------- //
+    function atualizarConsumos() {
+        document.querySelectorAll('tr[data-device-id]').forEach(tr => {
+            const id = tr.getAttribute('data-device-id');
+            fetch(`/aparelhos/consumo-atual/${id}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || data.error) return;
+
+                    // Atualiza a potência em Watts
+                    const wBadge = tr.querySelector('.consumo-w');
+                    if (wBadge) {
+                        wBadge.textContent = `${data.potencia.toFixed(1)} W`;
+                    }
+
+                    // Atualiza o status (Ativo/Inativo)
+                    const statusBadge = tr.querySelector('.status-badge');
+                    if (statusBadge && data.status !== undefined) {
+                        if (data.status) {
+                            statusBadge.className = 'badge bg-success status-badge';
+                            statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Ativo';
+                        } else {
+                            statusBadge.className = 'badge bg-secondary status-badge';
+                            statusBadge.innerHTML = '<i class="fas fa-pause-circle me-1"></i>Inativo';
+                        }
+                    }
+                })
+                .catch(()=>{});
+        });
+    }
+    setInterval(atualizarConsumos, 30000);
+    atualizarConsumos();
+
+    // Controle ligar/desligar Tuya
+    document.querySelectorAll('.toggle-tuya').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            const ext = this.getAttribute('data-ext');
+            const action = this.getAttribute('data-action');
+            const onVal = action === 'on';
+            fetch(`/api/tuya/device/${ext}/switch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ on: onVal })
+            })
+            .then(r => r.json())
+            .then(resp => {
+                if(!resp.ok){
+                    console.warn('Falha comando Tuya', resp);
+                } else {
+                    // Força a atualização imediata da linha específica após o comando
+                    const tr = document.querySelector(`tr[data-device-id="${btn.closest('tr').dataset.deviceId}"]`);
+                    if (tr) {
+                        const statusBadge = tr.querySelector('.status-badge');
+                        const wBadge = tr.querySelector('.consumo-w');
+                        if (statusBadge) {
+                             if (onVal) {
+                                statusBadge.className = 'badge bg-success status-badge';
+                                statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Ativo';
+                            } else {
+                                statusBadge.className = 'badge bg-secondary status-badge';
+                                statusBadge.innerHTML = '<i class="fas fa-pause-circle me-1"></i>Inativo';
+                                if(wBadge) wBadge.textContent = '0.0 W'; // Zera a potência visualmente
+                            }
+                        }
+                    }
+                }
+            })
+            .catch(err => console.error('Erro switch Tuya', err));
+        });
+    });
 </script>
 </div> <!-- fecha container-fluid -->
 {% endblock %}

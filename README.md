@@ -76,6 +76,7 @@ solarmind/
 ├── 📁 services/           # Serviços e lógica de negócio
 │   ├── automacao.py       # Automação residencial
 │   ├── goodwe_client.py   # Cliente API GoodWe
+│   ├── tuya_client.py     # Integração tomada inteligente (Tuya)
 │   └── simula_evento.py   # Simulador de eventos
 ├── 📁 utils/              # Utilitários
 │   ├── energia.py         # Funções de energia
@@ -202,6 +203,59 @@ Content-Type: application/json
   "acao": "desligar"
 }
 ```
+
+### 🔌 Tomada Inteligente (Tuya)
+
+Integração com tomada inteligente compatível com Tuya para capturar status e (quando suportado) métricas de energia.
+
+#### Endpoints
+```http
+GET /api/smartplug/status
+GET /api/smartplug/energy
+GET /api/smartplug/readings?limit=100
+GET /api/smartplug/summary
+```
+
+Exemplo de resposta `/api/smartplug/status`:
+```json
+{
+   "ok": true,
+   "data": {
+      "device_id": "xxxx",
+      "status": {...},
+      "energy": {...},
+      "timestamp": 1730000000
+   },
+   "fonte": "TUYA_API"
+}
+```
+
+#### Configuração
+Adicione ao `.env` (NÃO COMMITAR credenciais reais):
+```
+TUYA_ACCESS_ID=seu_access_id
+TUYA_ACCESS_SECRET=seu_access_secret
+TUYA_ENDPOINT=https://openapi.tuyaus.com
+TUYA_DEVICE_ID=seu_device_id
+```
+
+Descobrir o `DEVICE_ID`: Painel Tuya > Cloud > Linked Devices.
+
+Observação: Alguns dispositivos não expõem todas as métricas de energia via OpenAPI sem habilitar permissões extras no projeto Tuya Cloud (ex: Energy API / Electricity).
+
+#### Coleta Automática
+Um job do scheduler coleta leituras periódicas (default: a cada 60s) e salva em `smartplug_readings`.
+
+Configurar intervalo no `.env`:
+```
+SMARTPLUG_INTERVAL=60  # segundos (coloque 0 ou remova para desativar)
+```
+
+Endpoints adicionais:
+- `/api/smartplug/readings` retorna últimas leituras persistidas
+- `/api/smartplug/summary` retorna agregados (médias/máximos)
+
+Tabela criada automaticamente via `db.create_all()` se o modelo estiver importado no startup.
 
 ## 🤖 Inteligência Artificial
 

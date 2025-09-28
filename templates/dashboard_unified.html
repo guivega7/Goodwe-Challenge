@@ -440,11 +440,42 @@
     fetch('/api/insights', { method: 'POST' })
       .then(response => response.json())
       .then(data => {
-        if (data.insights) {
+        if (data.insights && data.insights.length > 0) {
+          let insightsHtml = '';
+          data.insights.forEach((insight, index) => {
+            const colors = [
+              { bg: '#28a745', border: '#1e7e34' }, // Verde
+              { bg: '#007bff', border: '#0056b3' }, // Azul
+              { bg: '#ffc107', border: '#e0a800' }  // Amarelo
+            ];
+            const color = colors[index % colors.length];
+            
+            insightsHtml += `
+              <div class="alert alert-success mb-2" style="background: ${color.bg}; border: 3px solid ${color.border}; color: #fff; font-weight: 500;">
+                <i class="fas fa-lightbulb me-2"></i>
+                <strong style="color: #fff;">${insight}</strong>
+              </div>
+            `;
+          });
+          
+          // Adicionar fonte se disponível
+          if (data.source) {
+            insightsHtml += `
+              <div class="text-center mt-2">
+                <small class="text-light">
+                  <i class="fas fa-robot me-1"></i>
+                  Gerado por ${data.source === 'gemini_ai' ? 'Inteligência Artificial' : 'Sistema SolarMind'}
+                </small>
+              </div>
+            `;
+          }
+          
+          content.innerHTML = insightsHtml;
+        } else {
           content.innerHTML = `
-            <div class="alert alert-success mb-2" style="background: #28a745; border: 3px solid #1e7e34; color: #fff; font-weight: 500;">
-              <i class="fas fa-lightbulb me-2"></i>
-              <strong style="color: #fff;">${data.insights[0] || 'Insight gerado com sucesso!'}</strong>
+            <div class="alert alert-warning" style="background: #ffc107; border: 3px solid #e0a800; color: #000; font-weight: 500;">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              <strong style="color: #000;">Nenhum insight disponível no momento.</strong>
             </div>
           `;
         }

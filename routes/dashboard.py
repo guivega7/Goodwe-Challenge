@@ -4,6 +4,7 @@ from services.goodwe_client import GoodWeClient
 from services.simula_evento import get_mock_event, dispara_alerta
 from routes.auth import login_required
 from utils.logger import get_logger
+from utils.previsao import obter_previsao_tempo, obter_icone_url # Importa as novas funções
 from datetime import datetime
 import os
 import json
@@ -64,9 +65,32 @@ def autopilot():
     """Página que exibe o Plano do Dia do Energy Autopilot."""
     # Valores padrão para demonstração; no futuro, ler do GoodWeClient
     soc = float(request.args.get('soc', '35'))
-    forecast = float(request.args.get('forecast', '8'))
+    
+    # Busca a previsão do tempo real
+    previsao_5_dias = obter_previsao_tempo()
+    
+    # Usa a descrição do tempo do primeiro dia da previsão para o plano diário
+    condicao_clima_hoje = "ensolarado"
+    if previsao_5_dias:
+        condicao_clima_hoje = previsao_5_dias[0].get('descricao', 'ensolarado')
+
+    # Simula a previsão de geração baseada no clima de hoje
+    fatores_clima = {'chuva': 0.2, 'nuvens': 0.5, 'limpo': 1.0, 'ensolarado': 1.0}
+    fator = 0.5 # Padrão
+    for key, val in fatores_clima.items():
+        if key in condicao_clima_hoje:
+            fator = val
+            break
+    forecast = round(15.0 * fator, 1) # Simula geração máxima de 15kWh
+
     plan = build_daily_plan(soc, forecast)
-    return render_template('autopilot.html', plan=plan)
+    
+    return render_template(
+        'autopilot.html', # Voltando para o template original
+        plan=plan, 
+        previsao_tempo=previsao_5_dias,
+        obter_icone_url=obter_icone_url # Passa a função para o template
+    )
 
 @dash_bp.route('/dashboard', methods=['GET', 'POST'])
 @login_required

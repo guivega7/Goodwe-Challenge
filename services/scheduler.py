@@ -22,6 +22,8 @@ import pytz
 from utils.logger import get_logger
 from utils.energia import dispara_alerta
 from services.energy_autopilot import build_daily_plan
+from services.smartplug_service import collect_and_store
+from services.device_sync import sync_tuya_devices
 
 logger = get_logger(__name__)
 
@@ -40,7 +42,8 @@ def _parse_hhmm(value: str, default: str) -> tuple[int, int]:
 
 
 def _get_tz() -> pytz.BaseTzInfo:
-    tzname = os.getenv("TZ", "America/Sao_Paulo")
+    # Aceitar TIMEZONE, TZ (mantendo retrocompatibilidade)
+    tzname = os.getenv("TIMEZONE") or os.getenv("TZ") or "America/Sao_Paulo"
     try:
         return pytz.timezone(tzname)
     except Exception:
@@ -99,6 +102,32 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
     tz = _get_tz()
     scheduler = BackgroundScheduler(timezone=tz)
 
+    # Funções wrapper para executar tarefas dentro do contexto da aplicação
+    def collect_and_store_with_context():
+        with app.app_context():
+            collect_and_store()
+
+    def sync_tuya_devices_with_context():
+        with app.app_context():
+            sync_tuya_devices()
+
+    # Job: Coleta periódica smart plug (intervalo em segundos, default 60)
+    try:
+        interval_seconds = int(os.getenv("SMARTPLUG_INTERVAL", "60"))
+        if interval_seconds > 0:
+            from apscheduler.triggers.interval import IntervalTrigger
+            scheduler.add_job(
+                collect_and_store_with_context,
+                IntervalTrigger(seconds=interval_seconds, timezone=tz),
+                id="smartplug-collector",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info(f"[Scheduler] Coleta SmartPlug a cada {interval_seconds}s")
+    except Exception as e:
+        logger.error(f"[Scheduler] Falha ao agendar smartplug collector: {e}")
+
     # Job: Resumo diário
     hh, mm = _parse_hhmm(os.getenv("DAILY_SUMMARY_TIME", "21:30"), "21:30")
     scheduler.add_job(
@@ -122,6 +151,22 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
     )
 
     scheduler.start()
+    # Job: Sincronização de dispositivos Tuya (intervalo configurável)
+    try:
+        if os.getenv("ENABLE_DEVICE_SYNC", "true").lower() in ("1", "true", "yes", "on"):
+            interval_sync = int(os.getenv("DEVICE_SYNC_INTERVAL", "1800"))  # 30 min default
+            from apscheduler.triggers.interval import IntervalTrigger
+            scheduler.add_job(
+                sync_tuya_devices_with_context,
+                IntervalTrigger(seconds=interval_sync, timezone=tz),
+                id="tuya-device-sync",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info(f"[Scheduler] Sincronização Tuya a cada {interval_sync}s")
+    except Exception as e:
+        logger.error(f"[Scheduler] Falha ao agendar sync Tuya: {e}")
     _scheduler = scheduler
     _started = True
     logger.info(

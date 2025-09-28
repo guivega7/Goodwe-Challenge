@@ -25,8 +25,12 @@ class Aparelho(db.Model):
     prioridade = db.Column(db.Integer, nullable=False)  # 1 (alta) a 5 (baixa)
     status = db.Column(db.Boolean, default=True, nullable=False)  # True = ligado
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    # Identificador externo (ex: ID Tuya) para sincronização idempotente
+    codigo_externo = db.Column(db.String(100), index=True, nullable=True)
+    # Origem/Fonte do dispositivo (ex: 'tuya', 'manual', 'goodwe')
+    origem = db.Column(db.String(30), index=True, nullable=True)
 
-    def __init__(self, nome, consumo, prioridade, usuario_id):
+    def __init__(self, nome, consumo, prioridade, usuario_id, codigo_externo=None, origem=None):
         """
         Inicializa um novo aparelho.
         
@@ -41,6 +45,8 @@ class Aparelho(db.Model):
         self.prioridade = prioridade
         self.usuario_id = usuario_id
         self.status = True
+        self.codigo_externo = codigo_externo
+        self.origem = origem
 
     def ligar(self):
         """Liga o aparelho."""
@@ -67,7 +73,9 @@ class Aparelho(db.Model):
             'consumo': self.consumo,
             'prioridade': self.prioridade,
             'status': self.status,
-            'usuario_id': self.usuario_id
+            'usuario_id': self.usuario_id,
+            'codigo_externo': self.codigo_externo,
+            'origem': self.origem
         }
 
     def __repr__(self):

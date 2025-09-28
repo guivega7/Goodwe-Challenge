@@ -49,6 +49,17 @@ def create_app():
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
+    # Registra filtros customizados do Jinja2
+    @app.template_filter('format_date')
+    def format_date_filter(date_str):
+        """Formata uma string de data de YYYY-MM-DD para DD/MM."""
+        try:
+            from datetime import datetime
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            return date_obj.strftime('%d/%m')
+        except (ValueError, TypeError):
+            return date_str  # Retorna a string original se não conseguir formatar
+
     @login_manager.user_loader
     def load_user(user_id):
         try:
@@ -77,6 +88,20 @@ def create_app():
 
     # Inicializa Scheduler (APScheduler)
     with app.app_context():
+        # Criar tabelas (inclui SmartPlugReading)
+        try:
+            from models import SmartPlugReading  # noqa: F401 (força import para registrar modelo)
+            db.create_all()
+            # Lightweight migrations (add new columns if missing)
+            try:
+                from utils.migrations import apply_migrations
+                changes = apply_migrations()
+                if changes:
+                    print(f"[MIGRATIONS] Applied: {', '.join(changes)}")
+            except Exception as mig_e:
+                print(f"[WARN] Migração leve falhou: {mig_e}")
+        except Exception as e:
+            print(f"[WARN] Falha ao criar tabelas: {e}")
         init_scheduler(app)
     
     return app

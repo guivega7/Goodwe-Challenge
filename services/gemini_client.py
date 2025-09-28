@@ -239,48 +239,69 @@ SUAS CARACTERÍSTICAS:
         energia_gerada = data.get('energia_gerada', 0)
         energia_consumida = data.get('energia_consumida', 0)
         soc_bateria = data.get('soc_bateria', 0)
+        economia_estimada = data.get('economia_estimada', 0)
+        hora_atual = data.get('horario_atual', datetime.now().hour)
         
         insights = []
         
-        # Insight 1: Performance
-        if energia_gerada > energia_consumida:
+        # Insight 1: Performance baseado na hora do dia
+        if 6 <= hora_atual <= 18:  # Durante o dia
+            if energia_gerada > energia_consumida:
+                eficiencia = (energia_gerada / energia_consumida * 100) if energia_consumida > 0 else 150
+                insights.append(
+                    f"🌞 Excelente performance diurna! Gerou {energia_gerada:.1f} kWh contra {energia_consumida:.1f} kWh consumidos. "
+                    f"Seu sistema está {eficiencia:.0f}% eficiente - parabéns!"
+                )
+            else:
+                insights.append(
+                    f"☀️ Produção solar em andamento: {energia_gerada:.1f} kWh gerados. "
+                    f"Para maximizar economia, use aparelhos pesados entre 10h-16h quando o sol estiver forte!"
+                )
+        else:  # Durante a noite
             insights.append(
-                f"🌞 Excelente! Você gerou {energia_gerada:.1f} kWh e consumiu {energia_consumida:.1f} kWh. "
-                f"Sua energia solar cobriu {(energia_gerada/energia_consumida*100):.0f}% do consumo hoje!"
-            )
-        else:
-            insights.append(
-                f"☀️ Hoje gerou {energia_gerada:.1f} kWh contra {energia_consumida:.1f} kWh consumidos. "
-                f"Dica: use aparelhos pesados entre 10h-16h para aproveitar mais o sol!"
+                f"🌙 Modo noturno ativo. Bateria em {soc_bateria:.0f}% - suficiente para cobrir consumo noturno. "
+                f"Próxima carga solar começa às 6h da manhã."
             )
         
-        # Insight 2: Bateria
+        # Insight 2: Bateria e armazenamento
         if soc_bateria > 80:
             insights.append(
-                f"🔋 Bateria em {soc_bateria:.0f}%! Perfeito para passar pelo horário de ponta (18h-21h) "
-                f"sem pagar energia cara da rede. Mantenha aparelhos pesados desligados à noite."
+                f"🔋 Bateria totalmente carregada ({soc_bateria:.0f}%)! Perfeita para enfrentar o horário de ponta (18h-21h) "
+                f"sem depender da rede elétrica cara. Economia garantida!"
             )
-        elif soc_bateria < 30:
+        elif soc_bateria > 50:
             insights.append(
-                f"⚡ Bateria em {soc_bateria:.0f}%. Evite usar aparelhos pesados agora. "
-                f"Aguarde o sol carregar a bateria ou use apenas o essencial até amanhã."
+                f"🔋 Bateria em ótimo nível ({soc_bateria:.0f}%). Continue usando energia solar durante o dia "
+                f"para manter este nível e garantir autonomia noturna."
+            )
+        elif soc_bateria > 20:
+            insights.append(
+                f"🔋 Bateria em {soc_bateria:.0f}%. Nível adequado, mas considere reduzir consumo de aparelhos pesados "
+                f"à noite para preservar a carga até amanhã."
             )
         else:
             insights.append(
-                f"🔄 Bateria em {soc_bateria:.0f}% - nível adequado. "
-                f"Use com moderação e reserve energia para o horário de ponta (18h-21h)."
+                f"⚠️ Bateria baixa ({soc_bateria:.0f}%). Evite usar aparelhos de alto consumo agora. "
+                f"Amanhã cedo o sol recarregará completamente a bateria."
             )
         
-        # Insight 3: Sustentabilidade
-        co2_evitado = energia_gerada * 0.5  # kg CO2 por kWh
-        insights.append(
-            f"🌱 Impacto ambiental: evitou {co2_evitado:.1f}kg de CO2 hoje! "
-            f"Equivale a {co2_evitado/2:.1f} km rodados por um carro. Continue fazendo a diferença!"
-        )
+        # Insight 3: Economia e sustentabilidade
+        if economia_estimada > 0:
+            co2_evitado = energia_gerada * 0.5  # kg CO2 por kWh
+            insights.append(
+                f"💰 Economia hoje: R$ {economia_estimada:.2f} só com energia solar! "
+                f"Isso equivale a evitar {co2_evitado:.1f}kg de CO2 - mesmo que dirigir {co2_evitado/2:.1f}km de carro. "
+                f"Continue investindo em energia limpa!"
+            )
+        else:
+            insights.append(
+                f"🌱 Mesmo sem geração hoje, seu investimento em energia solar já evitou toneladas de CO2. "
+                f"Os dias nublados fazem parte do ciclo - amanhã o sol volta mais forte!"
+            )
         
         return {
             'insights': insights,
-            'source': 'fallback_rules',
+            'source': 'fallback_intelligent',
             'generated_at': datetime.now().isoformat(),
             'data_analyzed': data
         }

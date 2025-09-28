@@ -590,22 +590,72 @@
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        energia_gerada: {{ relatorio.energia_hoje or 16.8 }},
-        energia_consumida: {{ relatorio.energia_consumida or 15.2 }},
-        soc_bateria: {{ relatorio.soc_bateria or 76 }}
-      })
+      }
     })
     .then(response => response.json())
     .then(data => {
-      if (data.status === 'sucesso') {
-        // Atualiza com insights reais da IA
-        console.log('Insights gerados:', data.insights);
+      if (data.ok && data.insights && data.insights.length > 0) {
+        let insightsHtml = '';
+        data.insights.forEach((insight, index) => {
+          const colors = [
+            { bg: 'rgba(40, 167, 69, 0.1)', border: '#28a745', textClass: 'text-success', icon: 'fa-solar-panel' },
+            { bg: 'rgba(0, 123, 255, 0.1)', border: '#007bff', textClass: 'text-primary', icon: 'fa-battery-three-quarters' },
+            { bg: 'rgba(255, 193, 7, 0.1)', border: '#ffc107', textClass: 'text-warning', icon: 'fa-leaf' }
+          ];
+          const color = colors[index % colors.length];
+          
+          insightsHtml += `
+            <div class="insight-card" style="background: ${color.bg}; border: 2px solid ${color.border}; border-radius: 15px; margin-bottom: 15px; padding: 20px;">
+              <div class="d-flex align-items-center">
+                <i class="fas ${color.icon} me-3 ${color.textClass}" style="font-size: 1.8em;"></i>
+                <div class="flex-grow-1">
+                  <span class="text-light">${insight}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        });
+        
+        // Adicionar fonte se disponível
+        if (data.source) {
+          insightsHtml += `
+            <div class="mt-3 p-2 text-center" style="background: rgba(0, 0, 0, 0.2); border-radius: 8px;">
+              <small class="text-muted">
+                <i class="fas fa-robot me-1 text-accent-clean"></i>
+                Gerado por ${data.source === 'gemini_ai' ? 'Inteligência Artificial' : 'Sistema SolarMind'}
+              </small>
+            </div>
+          `;
+        }
+        
+        content.innerHTML = insightsHtml;
+      } else {
+        content.innerHTML = `
+          <div class="insight-card insight-warning" style="background: #ffc107; border: 2px solid #e0a800;">
+            <div class="d-flex align-items-center">
+              <i class="fas fa-exclamation-triangle me-3 text-warning" style="font-size: 1.4em;"></i>
+              <div>
+                <strong class="text-warning">Nenhum insight disponível</strong><br>
+                <span class="text-light">Não foi possível gerar insights no momento.</span>
+              </div>
+            </div>
+          </div>
+        `;
       }
     })
     .catch(error => {
       console.error('Erro ao gerar insights:', error);
+      content.innerHTML = `
+        <div class="insight-card insight-danger" style="background: #dc3545; border: 2px solid #bd2130;">
+          <div class="d-flex align-items-center">
+            <i class="fas fa-times-circle me-3 text-danger" style="font-size: 1.4em;"></i>
+            <div>
+              <strong class="text-danger">Erro ao gerar insights</strong><br>
+              <span class="text-light">Tente novamente em alguns instantes.</span>
+            </div>
+          </div>
+        </div>
+      `;
     })
     .finally(() => {
       btn.disabled = false;
@@ -613,5 +663,8 @@
       content.style.opacity = '1';
     });
   }
+
+  // Conectar o botão de insights ao event listener
+  document.getElementById('generateInsightsBtn').addEventListener('click', refreshInsights);
 </script>
 {% endblock %}

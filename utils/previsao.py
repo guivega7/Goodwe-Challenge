@@ -1,198 +1,81 @@
 """
-Energy prediction utilities for solar power systems.
-
-This module provides weather-based energy generation predictions
-and smart recommendations for optimal energy usage.
+Módulo para buscar dados de previsão do tempo.
 """
 
+import os
 import requests
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
-from .logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# É recomendado usar uma API de previsão do tempo como OpenWeatherMap,
+# WeatherAPI, etc. A chave da API deve ser guardada no .env
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+BASE_URL = "http://api.openweathermap.org/data/2.5/forecast"
 
-class PrevisaoEnergia:
+def obter_previsao_tempo(cidade="Sao Paulo,BR", dias=5):
     """
-    Energy prediction class for solar power generation forecasting.
-    
-    Provides weather-based generation estimates and usage recommendations
-    to optimize energy consumption patterns.
+    Busca a previsão do tempo para os próximos dias.
+
+    Args:
+        cidade (str): A cidade para a qual buscar a previsão.
+        dias (int): O número de dias de previsão (máx 5 com a API gratuita).
+
+    Returns:
+        list: Uma lista de dicionários, cada um representando a previsão para um dia.
+              Retorna uma lista vazia se a API falhar ou a chave não for fornecida.
     """
-    
-    def __init__(self, capacidade_sistema: float = 30.0):
-        """
-        Initialize energy prediction system.
-        
-        Args:
-            capacidade_sistema: Maximum system capacity in kWh on clear day
-        """
-        self.DIAS_PREVISAO = 5
-        self.capacidade_sistema = capacidade_sistema
-        self.fatores_clima = {
-            'ensolarado': 1.0,
-            'sol': 1.0,
-            'claro': 0.95,
-            'parcialmente nublado': 0.7,
-            'nublado': 0.4,
-            'muito nublado': 0.3,
-            'chuvoso': 0.2,
-            'tempestade': 0.1
-        }
+    if not OPENWEATHER_API_KEY:
+        logger.warning("OPENWEATHER_API_KEY não definida no .env. Usando dados de exemplo.")
+        return _dados_exemplo_previsao()
 
-    def prever_geracao(self, condicao_clima: str) -> float:
-        """
-        Estimate solar energy generation based on weather conditions.
-        
-        Args:
-            condicao_clima: Weather condition description
-            
-        Returns:
-            float: Estimated energy generation in kWh
-        """
-        condicao_normalizada = condicao_clima.lower().strip()
-        fator = self.fatores_clima.get(condicao_normalizada, 0.5)
-        geracao_estimada = self.capacidade_sistema * fator
-        
-        logger.info(f"Geração estimada para '{condicao_clima}': {geracao_estimada:.2f} kWh")
-        return round(geracao_estimada, 2)
+    params = {
+        'q': cidade,
+        'appid': OPENWEATHER_API_KEY,
+        'units': 'metric',
+        'lang': 'pt_br',
+        'cnt': dias * 8 # A API retorna dados a cada 3 horas, 8 pontos por dia
+    }
 
-    def calcular_previsao_semanal(self, previsoes_clima: Dict[str, str]) -> Dict[str, Dict]:
-        """
-        Calculate weekly energy generation forecast.
-        
-        Args:
-            previsoes_clima: Dictionary with date as key and weather condition as value
-            
-        Returns:
-            dict: Weekly forecast with generation estimates and efficiency
-        """
-        previsao_semanal = {}
-        
-        for data, clima in previsoes_clima.items():
-            geracao = self.prever_geracao(clima)
-            eficiencia = (geracao / self.capacidade_sistema) * 100
-            
-            previsao_semanal[data] = {
-                'clima': clima,
-                'geracao_estimada': geracao,
-                'eficiencia_percentual': round(eficiencia, 1),
-                'categoria': self._categorizar_geracao(eficiencia)
-            }
-        
-        return previsao_semanal
+    try:
+        response = requests.get(BASE_URL, params=params)
+        response.raise_for_status() # Lança exceção para erros HTTP
+        data = response.json()
 
-    def _categorizar_geracao(self, eficiencia: float) -> str:
-        """
-        Categorize generation efficiency.
-        
-        Args:
-            eficiencia: Efficiency percentage
-            
-        Returns:
-            str: Generation category
-        """
-        if eficiencia >= 80:
-            return 'Excelente'
-        elif eficiencia >= 60:
-            return 'Boa'
-        elif eficiencia >= 40:
-            return 'Moderada'
-        else:
-            return 'Baixa'
+        previsao_diaria = []
+        dias_processados = set()
 
-    def sugerir_acoes(self, previsoes: Dict[str, Dict]) -> List[Dict]:
-        """
-        Suggest energy optimization actions based on forecasts.
-        
-        Args:
-            previsoes: Weekly forecast data
-            
-        Returns:
-            list: Action recommendations for each day
-        """
-        acoes = []
-        
-        for dia, previsao in previsoes.items():
-            geracao_estimada = previsao['geracao_estimada']
-            categoria = previsao['categoria']
-            
-            recomendacoes = self._gerar_recomendacoes(categoria, geracao_estimada)
-            
-            if recomendacoes:
-                acoes.append({
-                    'dia': dia,
-                    'geracao_estimada': geracao_estimada,
-                    'categoria': categoria,
-                    'clima': previsao['clima'],
-                    'acoes': recomendacoes
+        for item in data.get('list', []):
+            dia = item['dt_txt'].split(' ')[0]
+            if dia not in dias_processados:
+                previsao_diaria.append({
+                    "data": item['dt_txt'],
+                    "temperatura": item['main']['temp'],
+                    "descricao": item['weather'][0]['description'],
+                    "icone": item['weather'][0]['icon']
                 })
+                dias_processados.add(dia)
         
-        return acoes
+        # Garante que não retorne mais dias que o solicitado
+        return previsao_diaria[:dias]
 
-    def _gerar_recomendacoes(self, categoria: str, geracao: float) -> List[str]:
-        """
-        Generate specific recommendations based on generation category.
-        
-        Args:
-            categoria: Generation category
-            geracao: Estimated generation in kWh
-            
-        Returns:
-            list: List of recommendations
-        """
-        recomendacoes = []
-        
-        if categoria == 'Baixa':
-            recomendacoes.extend([
-                "Evite usar múltiplos aparelhos de alto consumo simultaneamente",
-                "Adie lavagem de roupas e uso do ar condicionado",
-                "Use timers para desligar aparelhos automaticamente",
-                "Considere usar energia da rede elétrica nos horários de pico"
-            ])
-        elif categoria == 'Moderada':
-            recomendacoes.extend([
-                "Use aparelhos de alto consumo com moderação",
-                "Prefira usar eletrodomésticos durante o dia",
-                "Evite uso simultâneo de ar condicionado e aquecedor"
-            ])
-        elif categoria == 'Boa':
-            recomendacoes.extend([
-                "Aproveite para usar aparelhos de alto consumo",
-                "Carregue dispositivos eletrônicos",
-                "É um bom dia para lavagem e secagem"
-            ])
-        elif categoria == 'Excelente':
-            recomendacoes.extend([
-                "Dia ideal para máximo uso de energia solar",
-                "Use todos os aparelhos necessários",
-                "Considere armazenar energia excedente"
-            ])
-        
-        return recomendacoes
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro ao chamar a API de previsão do tempo: {e}")
+        return _dados_exemplo_previsao() # Retorna dados de exemplo em caso de falha
+    except Exception as e:
+        logger.error(f"Erro inesperado ao processar previsão do tempo: {e}")
+        return _dados_exemplo_previsao()
 
-    def calcular_economia_projetada(self, previsoes: Dict[str, Dict], tarifa: float = 0.95) -> Dict:
-        """
-        Calculate projected energy savings.
-        
-        Args:
-            previsoes: Weekly forecast data
-            tarifa: Energy rate per kWh
-            
-        Returns:
-            dict: Projected savings information
-        """
-        total_geracao = sum(p['geracao_estimada'] for p in previsoes.values())
-        economia_total = total_geracao * tarifa
-        
-        dias_baixa_geracao = len([p for p in previsoes.values() if p['categoria'] == 'Baixa'])
-        dias_boa_geracao = len([p for p in previsoes.values() if p['categoria'] in ['Boa', 'Excelente']])
-        
-        return {
-            'geracao_total_estimada': round(total_geracao, 2),
-            'economia_estimada': round(economia_total, 2),
-            'dias_baixa_geracao': dias_baixa_geracao,
-            'dias_boa_geracao': dias_boa_geracao,
-            'media_diaria': round(total_geracao / len(previsoes), 2) if previsoes else 0
-        }
+def _dados_exemplo_previsao():
+    """Retorna uma lista de dados de previsão estáticos para desenvolvimento."""
+    return [
+        {'data': '2025-09-28 12:00:00', 'temperatura': 25.5, 'descricao': 'céu limpo', 'icone': '01d'},
+        {'data': '2025-09-29 12:00:00', 'temperatura': 26.1, 'descricao': 'algumas nuvens', 'icone': '02d'},
+        {'data': '2025-09-30 12:00:00', 'temperatura': 24.8, 'descricao': 'chuva leve', 'icone': '10d'},
+        {'data': '2025-10-01 12:00:00', 'temperatura': 27.0, 'descricao': 'ensolarado', 'icone': '01d'},
+        {'data': '2025-10-02 12:00:00', 'temperatura': 23.9, 'descricao': 'nuvens dispersas', 'icone': '03d'},
+    ]
+
+def obter_icone_url(codigo_icone):
+    """Retorna a URL completa para um ícone de tempo do OpenWeatherMap."""
+    return f"http://openweathermap.org/img/wn/{codigo_icone}@2x.png"
