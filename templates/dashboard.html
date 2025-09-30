@@ -157,7 +157,7 @@
         <i class="fa-solid fa-bolt"></i>
       </div>
       <h6 class="tech-label mb-2">Energia Hoje</h6>
-      <div class="tech-value">{{ relatorio.energia_hoje or '16.8' }}</div>
+      <div id="kpi-energia-hoje" class="tech-value">{{ relatorio.energia_hoje or '...' }}</div>
       <small class="text-muted">kWh gerados</small>
     </div>
   </div>
@@ -168,7 +168,7 @@
         <i class="fa-solid fa-battery-three-quarters"></i>
       </div>
       <h6 class="tech-label mb-2">SOC Bateria</h6>
-      <div class="tech-value">{{ relatorio.soc_bateria or '76' }}%</div>
+      <div id="kpi-soc-bateria" class="tech-value">{{ relatorio.soc_bateria or '...' }}%</div>
       <small class="text-muted">carga atual</small>
     </div>
   </div>
@@ -179,7 +179,7 @@
         <i class="fa-solid fa-coins"></i>
       </div>
       <h6 class="tech-label mb-2">Economia Hoje</h6>
-      <div class="tech-value">R$ {{ relatorio.economia_hoje or '12.40' }}</div>
+      <div id="kpi-economia-hoje" class="tech-value">R$ {{ relatorio.economia_hoje or '...' }}</div>
       <small class="text-muted">economizados</small>
     </div>
   </div>
@@ -187,13 +187,13 @@
   <div class="col-lg-3 col-md-6">
     <div class="tech-card p-4 text-center">
       <div class="tech-icon">
-        <i class="fa-solid fa-{% if relatorio.status == 'online' %}wifi{% else %}wifi-slash{% endif %}"></i>
+        <i id="kpi-status-icon" class="fa-solid fa-{% if relatorio.status == 'online' %}wifi{% else %}wifi-slash{% endif %}"></i>
       </div>
       <h6 class="tech-label mb-2">Status Sistema</h6>
-      <div class="tech-value {% if relatorio.status == 'online' %}status-online{% endif %}">
-        <span class="status-indicator"></span>{{ relatorio.status_texto or 'ONLINE' }}
+      <div id="kpi-status-text" class="tech-value {% if relatorio.status == 'online' %}status-online{% endif %}">
+        <span id="kpi-status-indicator" class="status-indicator"></span><span id="kpi-status-label">{{ relatorio.status_texto or 'ONLINE' }}</span>
       </div>
-      <small class="text-muted">{{ relatorio.last_update or 'atualizado agora' }}</small>
+      <small id="kpi-last-update" class="text-muted">{{ relatorio.last_update or '...' }}</small>
     </div>
   </div>
 </div>
@@ -416,11 +416,11 @@
       </div>
 
       <!-- Formulário de Configuração -->
-      <form method="POST" class="mb-4">
+      <form method="GET" class="mb-4">
         <div class="row g-3">
           <div class="col-md-6">
             <label for="fonte" class="form-label text-light">Fonte de Dados</label>
-            <select class="form-select" name="fonte" id="fonte">
+            <select class="form-select" name="fonte" id="fonte" onchange="this.form.submit()">
               <option value="mock" {% if request.args.get('fonte', 'mock') == 'mock' %}selected{% endif %}>Dados Simulados</option>
               <option value="api" {% if request.args.get('fonte') == 'api' %}selected{% endif %}>API Real (SEMS)</option>
             </select>
@@ -443,261 +443,111 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Função para mostrar/esconder campo SN
-  function toggleSnInput() {
-    const fonte = document.querySelector('select[name="fonte"]').value;
-    const snContainer = document.getElementById('snContainer');
-    if (fonte === 'api') {
-      snContainer.style.display = 'block';
-    } else {
-      snContainer.style.display = 'none';
+// ================== DASHBOARD DINÂMICO ==================
+const fonteSelecionada = new URLSearchParams(window.location.search).get('fonte') || 'mock';
+console.log('Fonte selecionada:', fonteSelecionada);
+let chartHistorico, chartDistribuicao, chartMensal, chartAnual;
+
+function fmt(num){ if(num===undefined||num===null||isNaN(num)) return 0; return Math.round(num*100)/100; }
+async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+
+function updateKpiCard(id, value, prefix = '', suffix = '') {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = `${prefix}${value}${suffix}`;
     }
-  }
+}
 
-  // Dados para gráficos combinados
-  const dadosHistorico = [
-    {data: 'Hoje', energia: {{ relatorio.energia_hoje or 16.8 }}}
-  ];
-
-  // Dados simulados para 7 dias
-  const labels7Dias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-  const dadosEnergia7Dias = [14.2, 18.7, 21.3, 16.8, 19.4, 22.1, {{ relatorio.energia_hoje or 16.8 }}];
-  const dadosConsumo7Dias = [18.5, 16.2, 17.8, 20.1, 15.9, 19.3, {{ relatorio.energia_consumida or 15.2 }}];
-
-  // Gráfico Histórico 7 Dias
-  const ctxHistorico = document.getElementById('graficoHistorico').getContext('2d');
-  new Chart(ctxHistorico, {
-    type: 'line',
-    data: {
-      labels: labels7Dias,
-      datasets: [{
-        label: 'Energia Gerada (kWh)',
-        data: dadosEnergia7Dias,
-        borderColor: '#FE5800',
-        backgroundColor: 'rgba(254, 88, 0, 0.1)',
-        tension: 0.4,
-        fill: true
-      }, {
-        label: 'Energia Consumida (kWh)',
-        data: dadosConsumo7Dias,
-        borderColor: '#17a2b8',
-        backgroundColor: 'rgba(23, 162, 184, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: { color: '#fff' }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        },
-        x: {
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        }
-      }
-    }
-  });
-
-  // Gráfico de Distribuição
-  const ctxDistribuicao = document.getElementById('graficoDistribuicao').getContext('2d');
-  new Chart(ctxDistribuicao, {
-    type: 'doughnut',
-    data: {
-      labels: ['Energia Gerada', 'Energia Consumida', 'Energia Injetada'],
-      datasets: [{
-        data: [{{ relatorio.energia_hoje or 16.8 }}, {{ relatorio.energia_consumida or 15.2 }}, {{ (relatorio.energia_hoje or 16.8) - (relatorio.energia_consumida or 15.2) }}],
-        backgroundColor: ['#FE5800', '#17a2b8', '#28a745'],
-        borderWidth: 2,
-        borderColor: '#fff'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: { color: '#fff', padding: 20 }
-        }
-      }
-    }
-  });
-
-  // Dados estatísticas mensais/anuais
-  const labelsMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const dadosMensais = [245, 278, 312, 289, 267, 234, 201, 256, 289, 298, 276, 312];
-
-  // Gráfico Mensal
-  const ctxMensal = document.getElementById('graficoMensal').getContext('2d');
-  new Chart(ctxMensal, {
-    type: 'bar',
-    data: {
-      labels: labelsMeses,
-      datasets: [{
-        label: 'Geração Mensal (kWh)',
-        data: dadosMensais,
-        backgroundColor: '#FE5800',
-        borderRadius: 8
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: { color: '#fff' }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        },
-        x: {
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        }
-      }
-    }
-  });
-
-  // Gráfico Anual
-  const ctxAnual = document.getElementById('graficoAnual').getContext('2d');
-  new Chart(ctxAnual, {
-    type: 'line',
-    data: {
-      labels: ['2021', '2022', '2023', '2024', '2025'],
-      datasets: [{
-        label: 'Geração Anual (kWh)',
-        data: [2800, 3000, 3200, 3100, 3245],
-        borderColor: '#28a745',
-        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: { color: '#fff' }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        },
-        x: {
-          ticks: { color: '#fff' },
-          grid: { color: 'rgba(255,255,255,0.1)' }
-        }
-      }
-    }
-  });
-
-  // Função para gerar insights
-  function refreshInsights() {
-    const btn = document.getElementById('generateInsightsBtn');
-    const loading = document.getElementById('insightsLoading');
-    const content = document.getElementById('insightsContent');
-    
-    btn.disabled = true;
-    loading.classList.remove('d-none');
-    content.style.opacity = '0.5';
-    
-    fetch('/api/insights', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.ok && data.insights && data.insights.length > 0) {
-        let insightsHtml = '';
-        data.insights.forEach((insight, index) => {
-          const colors = [
-            { bg: 'rgba(40, 167, 69, 0.1)', border: '#28a745', textClass: 'text-success', icon: 'fa-solar-panel' },
-            { bg: 'rgba(0, 123, 255, 0.1)', border: '#007bff', textClass: 'text-primary', icon: 'fa-battery-three-quarters' },
-            { bg: 'rgba(255, 193, 7, 0.1)', border: '#ffc107', textClass: 'text-warning', icon: 'fa-leaf' }
-          ];
-          const color = colors[index % colors.length];
-          
-          insightsHtml += `
-            <div class="insight-card" style="background: ${color.bg}; border: 2px solid ${color.border}; border-radius: 15px; margin-bottom: 15px; padding: 20px;">
-              <div class="d-flex align-items-center">
-                <i class="fas ${color.icon} me-3 ${color.textClass}" style="font-size: 1.8em;"></i>
-                <div class="flex-grow-1">
-                  <span class="text-light">${insight}</span>
-                </div>
-              </div>
-            </div>
-          `;
-        });
+async function carregarStatus(){ 
+    if(fonteSelecionada!=='api') return; 
+    try{ 
+        console.log('Carregando status...');
+        const res = await fetchJSON('/api/solar/status'); 
+        console.log('Resposta status:', res);
+        if(!res.ok) return;
+        const status = res.data;
+        const isOnline = status.status === 'online';
         
-        // Adicionar fonte se disponível
-        if (data.source) {
-          insightsHtml += `
-            <div class="mt-3 p-2 text-center" style="background: rgba(0, 0, 0, 0.2); border-radius: 8px;">
-              <small class="text-muted">
-                <i class="fas fa-robot me-1 text-accent-clean"></i>
-                Gerado por ${data.source === 'gemini_ai' ? 'Inteligência Artificial' : 'Sistema SolarMind'}
-              </small>
-            </div>
-          `;
-        }
-        
-        content.innerHTML = insightsHtml;
-      } else {
-        content.innerHTML = `
-          <div class="insight-card insight-warning" style="background: #ffc107; border: 2px solid #e0a800;">
-            <div class="d-flex align-items-center">
-              <i class="fas fa-exclamation-triangle me-3 text-warning" style="font-size: 1.4em;"></i>
-              <div>
-                <strong class="text-warning">Nenhum insight disponível</strong><br>
-                <span class="text-light">Não foi possível gerar insights no momento.</span>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    })
-    .catch(error => {
-      console.error('Erro ao gerar insights:', error);
-      content.innerHTML = `
-        <div class="insight-card insight-danger" style="background: #dc3545; border: 2px solid #bd2130;">
-          <div class="d-flex align-items-center">
-            <i class="fas fa-times-circle me-3 text-danger" style="font-size: 1.4em;"></i>
-            <div>
-              <strong class="text-danger">Erro ao gerar insights</strong><br>
-              <span class="text-light">Tente novamente em alguns instantes.</span>
-            </div>
-          </div>
-        </div>
-      `;
-    })
-    .finally(() => {
-      btn.disabled = false;
-      loading.classList.add('d-none');
-      content.style.opacity = '1';
-    });
-  }
+        updateKpiCard('kpi-status-label', status.status.toUpperCase());
+        document.getElementById('kpi-status-indicator').style.display = isOnline ? 'inline-block' : 'none';
+        const icon = document.getElementById('kpi-status-icon');
+        icon.className = `fa-solid ${isOnline ? 'fa-wifi' : 'fa-wifi-slash'}`;
+        document.getElementById('kpi-status-text').classList.toggle('status-online', isOnline);
+        updateKpiCard('kpi-last-update', new Date(res.data.timestamp).toLocaleTimeString());
 
-  // Conectar o botão de insights ao event listener
-  document.getElementById('generateInsightsBtn').addEventListener('click', refreshInsights);
+    } catch(e){ console.warn('status fail', e);} 
+}
+
+async function carregarData(){ 
+    if(fonteSelecionada!=='api') return; 
+    try{ 
+        console.log('Carregando data...');
+        const res = await fetchJSON('/api/solar/data'); 
+        console.log('Resposta data:', res);
+        if(!res.ok) return; 
+        const data = res.data; // CORREÇÃO: Acessar res.data diretamente
+        console.log('Dados extraídos:', data);
+        const prodHoje = data.producao.hoje; 
+        const consumoHoje = data.consumo?.hoje || 0; 
+        
+        updateKpiCard('kpi-energia-hoje', fmt(prodHoje));
+        updateKpiCard('kpi-soc-bateria', fmt(data.bateria.soc), '', '%');
+        updateKpiCard('kpi-economia-hoje', fmt(data.economia.hoje), 'R$ ');
+
+        atualizarDistribuicao(prodHoje, consumoHoje); 
+    } catch(e){ console.warn('data fail', e);} 
+}
+
+async function carregarHistorico(){ 
+    if(fonteSelecionada!=='api') return; 
+    try{ 
+        console.log('Carregando histórico...');
+        const res = await fetchJSON('/api/solar/history?days=7'); 
+        console.log('Resposta histórico:', res);
+        if(!res.ok) return; 
+        const hist = res.data; // CORREÇÃO: Acessar res.data diretamente
+        console.log('Histórico extraído:', hist);
+        const labels = hist.map(h=> h.data.slice(5)); 
+        const geracao = hist.map(h=> fmt(h.producao)); 
+        const consumo = geracao.map(v=> fmt(v*0.8)); // Consumo estimado
+        atualizarHistorico(labels, geracao, consumo); 
+        atualizarMensalEstimado(hist); 
+        atualizarAnualEstimado(hist); 
+    } catch(e){ console.warn('history fail', e);} 
+}
+
+function initCharts(){
+  chartHistorico = new Chart(document.getElementById('graficoHistorico'), { type:'line', data:{ labels:[], datasets:[ {label:'Energia Gerada (kWh)', data:[], borderColor:'#FE5800', backgroundColor:'rgba(254,88,0,0.15)', tension:0.35, fill:true}, {label:'Energia Consumida (kWh)', data:[], borderColor:'#17a2b8', backgroundColor:'rgba(23,162,184,0.15)', tension:0.35, fill:true} ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
+  chartDistribuicao = new Chart(document.getElementById('graficoDistribuicao'), { type:'doughnut', data:{ labels:['Energia Gerada','Energia Consumida','Excedente'], datasets:[{ data:[0,0,0], backgroundColor:['#FE5800','#17a2b8','#28a745'], borderColor:'#fff', borderWidth:2 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:'#fff', padding:20 } } } } });
+  chartMensal = new Chart(document.getElementById('graficoMensal'), { type:'bar', data:{ labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], datasets:[{ label:'Geração Mensal (kWh)', data:Array(12).fill(0), backgroundColor:'#FE5800', borderRadius:8 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
+  chartAnual = new Chart(document.getElementById('graficoAnual'), { type:'line', data:{ labels:[new Date().getFullYear()-4, new Date().getFullYear()-3, new Date().getFullYear()-2, new Date().getFullYear()-1, new Date().getFullYear()], datasets:[{ label:'Geração Anual (kWh)', data:[0,0,0,0,0], borderColor:'#28a745', backgroundColor:'rgba(40,167,69,0.15)', tension:0.35, fill:true }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
+}
+
+function atualizarHistorico(labels, geracao, consumo){ if(!chartHistorico) return; chartHistorico.data.labels = labels; chartHistorico.data.datasets[0].data = geracao; chartHistorico.data.datasets[1].data = consumo; chartHistorico.update(); }
+function atualizarDistribuicao(gerado, consumido){ if(!chartDistribuicao) return; const excedente = Math.max(0, fmt(gerado - consumido)); chartDistribuicao.data.datasets[0].data = [fmt(gerado), fmt(consumido), excedente]; chartDistribuicao.update(); }
+function atualizarMensalEstimado(hist){ const now = new Date(); const mesIdx = now.getMonth(); const soma = hist.reduce((acc,h)=>{ const d=new Date(h.data); return d.getMonth()===mesIdx ? acc + h.producao : acc; },0); chartMensal.data.datasets[0].data[mesIdx] = fmt(soma); chartMensal.update(); }
+function atualizarAnualEstimado(hist){ const ano = new Date().getFullYear(); const somaAno = hist.reduce((acc,h)=>{ const d=new Date(h.data); return d.getFullYear()===ano ? acc + h.producao : acc; },0); chartAnual.data.datasets[0].data[4] = fmt(somaAno); chartAnual.update(); }
+
+async function cicloRefresh(){ 
+    console.log('Iniciando cicloRefresh para fonte:', fonteSelecionada);
+    if(fonteSelecionada==='api'){ 
+        await carregarStatus(); 
+        await carregarData(); 
+        await carregarHistorico();
+    } 
+}
+initCharts();
+if(fonteSelecionada==='api'){
+  console.log('Configurando refresh para API');
+  cicloRefresh();
+  setInterval(()=> carregarStatus(), 30000);
+  setInterval(()=> carregarData(), 120000);
+  setInterval(()=> carregarHistorico(), 300000);
+} else {
+  console.log('Modo mock, sem refresh');
+}
+
+// Insights geração (já existia) - manter se necessário
+// document.getElementById('generateInsightsBtn') ... se existir manter comportamento anterior
 </script>
 {% endblock %}
