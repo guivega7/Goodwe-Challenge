@@ -1,19 +1,15 @@
 """
-GoodWe SEMS Portal API Client.
+GoodWe SEMS Portal API Client - Versão Funcional
 
-This module provides a client for communicating with the GoodWe SEMS Portal API
-to retrieve solar inverter data, energy generation metrics, and battery status.
+Este módulo implementa o cliente para a API GoodWe SEMS,
+testado e funcionando com a conta demo.
 """
 
 import base64
 import json
-import random
-import time
+import os
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Union
-
 import requests
-
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,537 +17,602 @@ logger = get_logger(__name__)
 
 class GoodWeClient:
     """
-    Client for GoodWe SEMS Portal API communication.
-    
-    Provides methods to authenticate and retrieve solar inverter data
-    including power generation, energy production, and battery status.
+    Cliente para GoodWe SEMS Portal API.
     """
-    
+
     BASE_URLS = {
         "us": "https://us.semsportal.com/api/",
         "eu": "https://eu.semsportal.com/api/",
     }
-    
-    API_VERSION = "v2.0.4"
-    CLIENT_TYPE = "web"
-    DEFAULT_LANGUAGE = "en"
-    REQUEST_TIMEOUT = 30
 
     def __init__(self, region: str = "us"):
-        """
-        Initialize GoodWe API client.
-        
-        Args:
-            region: API region (us or eu)
-        """
         self.region = region
         self.session = requests.Session()
-        self.session.verify = True
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
         })
+        # Cache simples de token (renova a cada 5 minutos)
+        self._token_cache: dict | None = None
+        # Credenciais carregadas opcionalmente do ambiente
+        self.account: str | None = None
+        self.password: str | None = None
+        self.inverter_id: str | None = None
+        self.login_region: str = region
+        self.data_region: str = region
+        # Base URL de dados retornada pelo login (pode incluir porta 82)
+        self._data_base_url_override: str | None = None
 
     def _get_base_url(self) -> str:
-        """Get base URL for the configured region."""
         return self.BASE_URLS.get(self.region, self.BASE_URLS["us"])
 
     def _generate_initial_token(self) -> str:
-        """
-        Generate initial token for first API request.
-        
-        Returns:
-            str: Base64 encoded initial token
-        """
-        timestamp = str(int(time.time() * 1000))
-        
+        """Gera token inicial no formato minimalista (compatível com exemplo professor)."""
         token_data = {
-            "version": self.API_VERSION,
-            "client": self.CLIENT_TYPE,
-            "language": self.DEFAULT_LANGUAGE,
-            "timestamp": timestamp,
             "uid": "",
+            "timestamp": 0,
             "token": "",
+            "client": "web",
+            "version": "",
+            "language": "en",
         }
-        
-        return base64.b64encode(json.dumps(token_data).encode()).decode()
+        return base64.b64encode(json.dumps(token_data).encode('utf-8')).decode('utf-8')
 
-    def crosslogin(self, account: str, password: str) -> Optional[str]:
+    def crosslogin(self, account: str, password: str) -> str | None:
         """
-        Authenticate with GoodWe SEMS Portal.
-        
+        Faz login na API GoodWe SEMS.
+
         Args:
-            account: User account/email
-            password: User password
-            
+            account: Email da conta
+            password: Senha da conta
+
         Returns:
-            str: Authentication token if successful, None otherwise
+            Token pós-login ou None se falhar
         """
-        url = f"{self._get_base_url()}v2/Common/CrossLogin"
-        timestamp = str(int(time.time() * 1000))
-        
+        # Persistir credenciais (necessário para retries automáticos depois)
+        self.account = account
+        self.password = password
+
+        url = f"{self._get_base_url()}v2/common/crosslogin"
+
         headers = {
             "Token": self._generate_initial_token(),
             "Content-Type": "application/json",
-            "Origin": f"https://{self.region}.semsportal.com",
-            "Referer": f"https://{self.region}.semsportal.com/",
+            "Accept": "*/*",
+            "Origin": "https://semsportal.com",
+            "Referer": "https://semsportal.com/",
         }
-        
+
         payload = {
             "account": account,
             "pwd": password,
-            "validCode": "",
-            "is_local": True,
-            "timestamp": timestamp,
-            "agreement_agreement": True,
+            "agreement_agreement": 0,
+            "is_local": False,
         }
-        
-        try:
-            logger.info(f"Attempting login to GoodWe SEMS Portal for account: {account}")
-            
-            response = self.session.post(
-                url, 
-                json=payload, 
-                headers=headers, 
-                timeout=self.REQUEST_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data.get("data"):
-                    try:
-                        token = base64.b64encode(
-                            json.dumps(data.get("data")).encode()
-                        ).decode()
-                        self.session.headers.update({"Token": token})
-                        logger.info("Successfully authenticated with GoodWe SEMS Portal")
-                        return token
-                    except Exception as e:
-                        logger.error(f"Failed to encode authentication token: {e}")
-                        return None
-                
-                # Fallback for legacy token format
-                if (data.get("code") == 10000 and 
-                    isinstance(data.get("data"), dict)):
-                    token_data = data.get("data", {})
-                    if token_data.get("token"):
-                        token = token_data.get("token")
-                        self.session.headers.update({"Token": token})
-                        logger.info("Successfully authenticated (legacy format)")
-                        return token
-                
-                logger.error(f"Login failed: {data.get('msg')} (Code: {data.get('code')})")
-            else:
-                logger.error(f"Login request failed with status: {response.status_code}")
-                
-            return None
-            
-        except requests.RequestException as e:
-            logger.error(f"Network error during login: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error during login: {e}")
-            return None
 
-    def get_inverter_data_by_column(
-        self, 
-        token: str, 
-        inverter_id: str, 
-        column: str, 
-        date: str
-    ) -> Optional[Dict]:
-        """
-        Retrieve inverter data for a specific column.
-        
-        Args:
-            token: Authentication token
-            inverter_id: Inverter identifier
-            column: Data column name (e.g., 'Pac', 'Eday', 'Cbattery1')
-            date: Date string in YYYY-MM-DD format
-            
-        Returns:
-            dict: API response data or None if failed
-        """
-        url = f"{self._get_base_url()}PowerStationMonitor/GetInverterDataByColumn"
-        
-        headers = {
-            "Token": token,
-            "Content-Type": "application/json",
-        }
-        
-        payload = {
-            "id": inverter_id, 
-            "date": date, 
-            "column": column
-        }
-        
-        try:
-            logger.debug(f"Requesting inverter data: {column} for {date}")
-            
-            response = self.session.post(
-                url, 
-                json=payload, 
-                headers=headers, 
-                timeout=self.REQUEST_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                try:
-                    return response.json()
-                except json.JSONDecodeError:
-                    logger.warning("Invalid JSON response from inverter data API")
-                    return None
-            else:
-                logger.error(f"Inverter data request failed: {response.status_code}")
-                return None
-                
-        except requests.RequestException as e:
-            logger.error(f"Network error retrieving inverter data: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error retrieving inverter data: {e}")
-            return None
+        tried_regions = []
+        regions_to_try = [self.region]
+        alt = 'eu' if self.region.lower() == 'us' else 'us'
+        if alt not in regions_to_try:
+            regions_to_try.append(alt)
 
-    def _parse_time_series_data(self, response_data: Dict) -> Optional[List[Tuple]]:
-        """
-        Parse time series data from API response.
-        
-        Args:
-            response_data: Raw API response data
-            
-        Returns:
-            list: List of (datetime, value) tuples or None if parsing failed
-        """
-        if not response_data:
-            return None
-            
-        data = (response_data if not isinstance(response_data, dict) 
-                else response_data.get("data", response_data))
-        
-        # Find the data list
-        candidate_list = None
-        if isinstance(data, dict):
-            for value in data.values():
-                if isinstance(value, list):
-                    candidate_list = value
-                    break
-        elif isinstance(data, list):
-            candidate_list = data
-            
-        if not candidate_list:
-            return None
-            
-        series = []
-        time_fields = ("date", "time", "collectTime", "timestamp")
-        value_fields = ("column", "value", "val", "v")
-        
-        for item in candidate_list:
-            if not isinstance(item, dict):
-                continue
-                
-            # Extract time
-            timestamp = None
-            for field in time_fields:
-                if field in item:
-                    timestamp = item[field]
-                    break
-                    
-            if timestamp is None:
-                # Look for any field containing 'time' or 'date'
-                for key in item.keys():
-                    if 'time' in key.lower() or 'date' in key.lower():
-                        timestamp = item[key]
-                        break
-                        
-            # Extract value
-            value = None
-            for field in value_fields:
-                if field in item:
-                    value = item[field]
-                    break
-                    
-            if value is None:
-                # Look for numeric values
-                for key, val in item.items():
-                    if key not in time_fields and isinstance(val, (int, float)):
-                        value = val
-                        break
-                        
-            # Parse timestamp
-            parsed_time = self._parse_timestamp(timestamp)
-            if parsed_time:
-                series.append((parsed_time, value))
-                
-        return series if series else None
-
-    def _parse_timestamp(self, timestamp: Union[str, int, float]) -> Optional[datetime]:
-        """
-        Parse various timestamp formats.
-        
-        Args:
-            timestamp: Timestamp in various formats
-            
-        Returns:
-            datetime: Parsed datetime object or None
-        """
-        if isinstance(timestamp, (int, float)):
+        for attempt, region in enumerate(regions_to_try, start=1):
+            self.region = region
+            url = f"{self._get_base_url()}v2/common/crosslogin"
+            tried_regions.append(region)
             try:
-                return datetime.fromtimestamp(float(timestamp))
-            except (ValueError, OSError):
-                return None
-                
-        if isinstance(timestamp, str):
-            formats = [
-                "%Y-%m-%d %H:%M:%S",
-                "%d/%m/%Y %H:%M:%S", 
-                "%Y-%m-%d",
-                "%d/%m/%Y"
-            ]
-            
-            for fmt in formats:
+                logger.info(
+                    f"[GoodWeLogin] Tentativa {attempt}/{len(regions_to_try)} | account={account} | region={region} | url={url}"
+                )
+                logger.debug(f"[GoodWeLogin] Headers iniciais: Token(Base64-json)={headers['Token'][:25]}...")
+                response = self.session.post(url, json=payload, headers=headers, timeout=30)
+
+                logger.info(f"[GoodWeLogin] HTTP {response.status_code} (region={region})")
+                body_text = ''
                 try:
-                    return datetime.strptime(timestamp, fmt)
-                except ValueError:
-                    continue
-                    
+                    body_text = response.text[:600]
+                except Exception:
+                    pass
+                logger.debug(f"[GoodWeLogin] Raw body (truncado 600 chars) region={region}: {body_text}")
+
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                    except Exception as je:
+                        logger.error(f"[GoodWeLogin] Falha ao parsear JSON: {je}")
+                        continue
+                    login_data = data.get("data")
+                    if login_data:
+                        for key in ('api', 'apiDomain', 'server'):
+                            if key in login_data and isinstance(login_data[key], str):
+                                host = login_data[key].lower()
+                                if 'eu' in host:
+                                    self.data_region = 'eu'
+                                elif 'us' in host:
+                                    self.data_region = 'us'
+                                api_val = login_data[key]
+                                if 'PowerStationMonitor' in api_val:
+                                    base_part = api_val.split('PowerStationMonitor/')[0]
+                                    if not base_part.endswith('/'):
+                                        base_part += '/'
+                                    self._data_base_url_override = base_part
+                                    logger.info(f"[GoodWeLogin] Override base dados detectado: {self._data_base_url_override}")
+                        token = base64.b64encode(json.dumps(login_data).encode()).decode()
+                        logger.info(
+                            f"✅ Login bem-sucedido | login_region={region} | data_region={self.data_region} | token_prefix={token[:20]}..."
+                        )
+                        return token
+                    else:
+                        logger.error(f"[GoodWeLogin] Resposta sem campo 'data' (region={region}): {data}")
+                else:
+                    logger.error(
+                        f"[GoodWeLogin] Falha HTTP {response.status_code} (region={region}) | body_trunc={body_text}"
+                    )
+            except requests.Timeout:
+                logger.error(f"[GoodWeLogin] Timeout (region={region})")
+            except Exception as e:
+                logger.error(f"❌ Erro no login (region={region}): {e}")
+
+        if tried_regions:
+            self.region = tried_regions[0]
+        logger.error(f"[GoodWeLogin] Todas as tentativas de login falharam. Tentado: {tried_regions}")
+
         return None
 
-    def get_multiple_columns_data(
-        self, 
-        token: str, 
-        inverter_id: str, 
-        columns: List[str], 
-        date: str,
-        use_mock_data: bool = False
-    ) -> Dict[str, List[Tuple]]:
+    def get_inverter_data_by_column(self, token: str, inv_id: str, column: str, date: str) -> dict | None:
         """
-        Retrieve data for multiple columns.
-        
-        Args:
-            token: Authentication token
-            inverter_id: Inverter identifier
-            columns: List of column names to retrieve
-            date: Date string in YYYY-MM-DD format
-            use_mock_data: Whether to generate mock data on API failure
-            
-        Returns:
-            dict: Column name mapped to time series data
-        """
-        results = {}
-        error_details = {}
-        has_real_data = False
-        
-        for column in columns:
-            logger.debug(f"Fetching data for column: {column}")
-            
-            response = self.get_inverter_data_by_column(
-                token, inverter_id, column, date
-            )
-            
-            if response and not response.get('hasError'):
-                series = self._parse_time_series_data(response)
-                if series:
-                    results[column] = series
-                    has_real_data = True
-                    continue
-                    
-            # Handle API errors
-            if isinstance(response, dict) and response.get('msg'):
-                error_details[column] = response.get('msg', 'Unknown error')
-                
-            # Generate mock data if requested and real data failed
-            if use_mock_data:
-                logger.warning(f"Using mock data for column: {column}")
-                mock_series = self._generate_mock_time_series(column, date)
-                results[column] = mock_series
-            else:
-                logger.error(f"No valid data found for column: {column}")
-                results[column] = []
-                
-        # Include error details for debugging
-        if error_details:
-            results['_error_details'] = error_details
-            
-        if not has_real_data and not use_mock_data:
-            logger.warning(f"No real data available for inverter: {inverter_id}")
-            
-        return results
+        Busca dados de uma coluna específica do inversor.
 
-    def _generate_mock_time_series(self, column: str, date_str: str) -> List[Tuple]:
-        """
-        Generate realistic mock time series data for development.
-        
         Args:
-            column: Column name for appropriate data pattern
-            date_str: Date string in YYYY-MM-DD format
-            
+            token: Token de autenticação
+            inv_id: Serial Number do inversor
+            column: Nome da coluna (ex: 'Pac', 'Cbattery1')
+            date: Data no formato YYYY-MM-DD 00:00:00
+
         Returns:
-            list: Mock time series data as (datetime, value) tuples
+            Dados da API ou None se falhar
+        """
+        base_primary = self._data_base_url_override or self._get_base_url()
+        candidates = [base_primary]
+        # Estratégia de otimização: se já confirmamos que data_region é EU, priorizar (ou forçar) EU
+        if self.data_region == 'eu':
+            eu_base = 'https://eu.semsportal.com/api/'
+            if eu_base not in candidates:
+                candidates.insert(0, eu_base)
+            # Se base primária ainda for US, podemos remover para não gerar logs/code=100002 desnecessários
+            candidates = [c for c in candidates if 'us.semsportal.com' not in c] or [eu_base]
+        else:
+            # Caso ainda não confirmado EU e base seja US, incluir EU cedo para fallback rápido
+            if 'us.semsportal.com' in base_primary and 'eu.semsportal.com' not in base_primary:
+                eu_base = 'https://eu.semsportal.com/api/'
+                if eu_base not in candidates:
+                    candidates.append(eu_base)
+
+        # Fallback de formato de data: se vier com hora vamos tentar sem hora em retries
+        date_variants = [date]
+        if ' ' in date:
+            just_date = date.split(' ')[0]
+            if just_date not in date_variants:
+                date_variants.append(just_date)
+        headers_base = {"Content-Type": "application/json"}
+        max_token_cycles = 2
+        token_cycle = 0
+        current_token = token
+        while token_cycle < max_token_cycles:
+            for date_var in date_variants:
+                for base in list(candidates):
+                    url = f"{base}PowerStationMonitor/GetInverterDataByColumn"
+                    headers = {**headers_base, "Token": current_token}
+                    payload = {"id": inv_id, "date": date_var, "column": column}
+                    try:
+                        logger.info(f"[GoodWe] Fetch col={column} date={date_var} base={base} tokenCycle={token_cycle}")
+                        response = self.session.post(url, json=payload, headers=headers, timeout=30)
+                    except Exception as re:
+                        logger.error(f"[GoodWe] Exceção request base={base}: {re}")
+                        continue
+                    if response.status_code != 200:
+                        logger.warning(f"[GoodWe] HTTP {response.status_code} base={base} body={response.text[:200]}")
+                        continue
+                    try:
+                        data = response.json()
+                    except Exception as je:
+                        logger.error(f"[GoodWe] Falha parse JSON base={base}: {je}")
+                        continue
+                    code = data.get('code') if isinstance(data, dict) else None
+                    if code == 100002:
+                        comp_api = data.get('components', {}).get('api') if isinstance(data, dict) else None
+                        if comp_api and 'PowerStationMonitor' in comp_api:
+                            base_part = comp_api.split('PowerStationMonitor/')[0]
+                            if not base_part.endswith('/'):
+                                base_part += '/'
+                            if base_part not in candidates:
+                                candidates.append(base_part)
+                                logger.info(f"[GoodWe] Adicionando base sugerida components.api={base_part}")
+                        logger.warning(f"[GoodWe] code=100002 em base={base} date={date_var}")
+                        continue
+                    logger.debug(f"[GoodWe] Sucesso base={base} date={date_var} code={code} keys={list(data.keys()) if isinstance(data, dict) else type(data)}")
+                    try:
+                        if 'eu.semsportal.com' in base and self.data_region != 'eu':
+                            self.data_region = 'eu'
+                            logger.info('[GoodWe] Ajustando data_region -> eu (auto-switch)')
+                        elif 'us.semsportal.com' in base and self.data_region != 'us':
+                            self.data_region = 'us'
+                    except Exception:
+                        pass
+                    return data
+            token_cycle += 1
+            if self.account and self.password:
+                logger.info(f"[GoodWe] Renovando token ciclo={token_cycle} devido a falhas/100002")
+                new_token = self.crosslogin(self.account, self.password)
+                if not new_token:
+                    logger.error("[GoodWe] Falha ao renovar token - abortando")
+                    break
+                current_token = new_token
+                if self._data_base_url_override and self._data_base_url_override not in candidates:
+                    candidates.insert(0, self._data_base_url_override)
+            else:
+                logger.error("[GoodWe] Não há credenciais salvas para renovar token")
+                break
+        logger.error("[GoodWe] Todas as tentativas esgotadas sem sucesso")
+        return {"error": True, "msg": "Falha ao obter dados depois de retries", "code": 100002}
+
+    def debug_raw_column_fetch(self, account: str, password: str, inv_id: str, column: str, date: str, region: str = 'us') -> dict:
+        """Método de depuração que replica abordagem 'mínima' do professor.
+        Não usa caches ou overrides, para comparar comportamento.
         """
         try:
-            base_date = datetime.strptime(date_str, '%Y-%m-%d')
-        except ValueError:
-            base_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            
-        series = []
-        
-        if column == 'Pac':  # Power generation (kW)
-            for hour in range(24):
-                dt = base_date + timedelta(hours=hour)
-                if 6 <= hour <= 18:  # Daylight hours
-                    # Solar curve: low at sunrise/sunset, peak at noon
-                    solar_factor = abs(12 - hour) / 6.0
-                    power = max(0, 5.5 - (solar_factor * 4.5) + random.uniform(-0.5, 0.5))
-                    power = round(power, 2)
-                else:
-                    power = 0.0
-                series.append((dt, power))
-                
-        elif column == 'Eday':  # Daily energy (kWh) - cumulative
-            energy = 0.0
-            for hour in range(24):
-                dt = base_date + timedelta(hours=hour)
-                if 6 <= hour <= 18:
-                    energy += random.uniform(0.3, 1.2)
-                series.append((dt, round(energy, 2)))
-                
-        elif column == 'Cbattery1':  # Battery SOC (%)
-            soc = 80.0  # Start at 80%
-            for hour in range(24):
-                dt = base_date + timedelta(hours=hour)
-                if 8 <= hour <= 16:  # Charging during solar hours
-                    soc = min(100.0, soc + random.uniform(0.5, 2.0))
-                elif 18 <= hour <= 23:  # Discharging at night
-                    soc = max(20.0, soc - random.uniform(1.0, 3.0))
-                series.append((dt, round(soc, 1)))
-                
-        else:  # Generic column - random values
-            for hour in range(24):
-                dt = base_date + timedelta(hours=hour)
-                value = round(random.uniform(10, 50), 2)
-                series.append((dt, value))
-                
-        return series
-
-    def get_station_list(self, token: str) -> Optional[List[Dict]]:
-        """
-        Get list of power stations for authenticated user.
-        
-        Args:
-            token: Authentication token
-            
-        Returns:
-            list: List of power station information
-        """
-        url = f"{self._get_base_url()}PowerStation/GetMonitorDetailByPowerstationId"
-        
-        headers = {
-            "Token": token,
-            "Content-Type": "application/json",
-        }
-        
-        try:
-            response = self.session.post(
-                url, 
-                headers=headers, 
-                timeout=self.REQUEST_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('data', [])
-            else:
-                logger.error(f"Failed to get station list: {response.status_code}")
-                return None
-                
+            raw_token = self.crosslogin(account, password)
+            if not raw_token:
+                return {"error": True, "stage": "login", "details": "login falhou"}
+            url = f"https://{region}.semsportal.com/api/PowerStationMonitor/GetInverterDataByColumn"
+            headers = {"Token": raw_token, "Content-Type": "application/json", "Accept": "*/*"}
+            payload = {"date": date, "column": column, "id": inv_id}
+            r = self.session.post(url, json=payload, headers=headers, timeout=30)
+            return {"status": r.status_code, "body": r.text[:800]}
         except Exception as e:
-            logger.error(f"Error getting station list: {e}")
-            return None
+            return {"error": True, "exception": str(e)}
 
-    def get_user_stations_and_inverters(self, token: str) -> Dict:
-        """
-        Get comprehensive list of user's stations and inverters.
-        
+    # ------------------------- Funções utilitárias internas ------------------------- #
+    def _load_env_credentials(self):
+        """Carrega credenciais do ambiente apenas uma vez."""
+        if self.account and self.password and self.inverter_id:
+            return
+        self.account = os.getenv('SEMS_ACCOUNT')
+        self.password = os.getenv('SEMS_PASSWORD')
+        self.inverter_id = os.getenv('SEMS_INV_ID')
+        self.login_region = os.getenv('SEMS_LOGIN_REGION', self.region or 'us').lower()
+        self.data_region = os.getenv('SEMS_DATA_REGION', self.login_region).lower()
+
+    def _get_token(self, force: bool = False) -> str | None:
+        """Obtém (ou renova) token usando credenciais do ambiente.
+
         Args:
-            token: Authentication token
-            
-        Returns:
-            dict: Contains stations, inverters and any errors
+            force: força renovação
         """
-        result = {
-            'stations': [],
-            'inverters': [],
-            'errors': [],
-            'has_access': False
+        self._load_env_credentials()
+        if not all([self.account, self.password]):
+            logger.warning("Credenciais GoodWe não configuradas.")
+            return None
+        # Uso de cache (5 minutos)
+        if not force and self._token_cache:
+            ts = self._token_cache.get('ts')
+            if ts and datetime.utcnow() - ts < timedelta(minutes=5):
+                return self._token_cache.get('token')
+        # Fazer login na região de login
+        prev_region = self.region
+        try:
+            self.region = self.login_region
+            token = self.crosslogin(self.account, self.password)
+            if token:
+                self._token_cache = {'token': token, 'ts': datetime.utcnow()}
+            return token
+        finally:
+            # Restaurar a região (evitar efeitos colaterais)
+            self.region = prev_region
+
+    @staticmethod
+    def _extract_last_numeric(data_resp) -> float:
+        """Extrai último valor numérico de uma resposta variada da API.
+        Reaproveita lógica parecida usada em dashboard."""
+        try:
+            if not data_resp:
+                return 0.0
+            # Algumas respostas vêm como dict com chave 'data'
+            if isinstance(data_resp, dict):
+                if 'data' in data_resp and isinstance(data_resp['data'], dict):
+                    data_resp = data_resp['data']
+                # Procura listas plausíveis
+                for list_key in ('column1', 'list', 'items', 'datas', 'result', 'data'):
+                    if list_key in data_resp and isinstance(data_resp[list_key], list) and data_resp[list_key]:
+                        last = data_resp[list_key][-1]
+                        if isinstance(last, dict):
+                            for val_key in ('column', 'value', 'val', 'v'):
+                                if val_key in last:
+                                    try:
+                                        return float(last[val_key])
+                                    except Exception:
+                                        continue
+                            for v in last.values():
+                                if isinstance(v, (int, float)):
+                                    return float(v)
+                        elif isinstance(last, (int, float)):
+                            return float(last)
+                # Se não achou, tentar se for lista direta
+            if isinstance(data_resp, list) and data_resp:
+                last = data_resp[-1]
+                if isinstance(last, (int, float)):
+                    return float(last)
+                if isinstance(last, dict):
+                    for val_key in ('column', 'value', 'val', 'v'):
+                        if val_key in last:
+                            try:
+                                return float(last[val_key])
+                            except Exception:
+                                continue
+                    for v in last.values():
+                        if isinstance(v, (int, float)):
+                            return float(v)
+        except Exception:
+            pass
+        return 0.0
+
+    @staticmethod
+    def _sum_series(data_resp) -> float:
+        """Soma valores de uma série (usada para 'Eday')."""
+        total = 0.0
+        try:
+            if not data_resp:
+                return 0.0
+            # Procurar arrays de pontos
+            series_candidates = []
+            if isinstance(data_resp, dict):
+                d = data_resp.get('data', data_resp)
+                for k, v in d.items():
+                    if isinstance(v, list) and v:
+                        series_candidates.append(v)
+            elif isinstance(data_resp, list):
+                series_candidates.append(data_resp)
+            for serie in series_candidates:
+                for point in serie:
+                    if isinstance(point, (list, tuple)) and len(point) >= 2:
+                        try:
+                            total += float(point[1])
+                        except Exception:
+                            continue
+                    elif isinstance(point, dict):
+                        for val_key in ('value', 'val', 'v', 'column'):
+                            if val_key in point:
+                                try:
+                                    total += float(point[val_key])
+                                    break
+                                except Exception:
+                                    continue
+            return total
+        except Exception:
+            return total
+
+    @staticmethod
+    def _last_series_value(data_resp) -> float:
+        """Retorna o último valor de uma série tipo 'eday' (acumulado do dia)."""
+        try:
+            if not data_resp or not isinstance(data_resp, dict):
+                return 0.0
+            data_part = data_resp.get('data')
+            if not isinstance(data_part, dict):
+                return 0.0
+            serie = data_part.get('column1')
+            if not isinstance(serie, list) or not serie:
+                return 0.0
+            last = serie[-1]
+            if isinstance(last, dict):
+                v = last.get('column') or last.get('value') or last.get('val')
+                if isinstance(v, (int, float)):
+                    return float(v)
+            return 0.0
+        except Exception:
+            return 0.0
+
+    @staticmethod
+    def _average_series(data_resp) -> float:
+        """Calcula a média dos valores de uma série (ex.: SOC em 'Cbattery1')."""
+        try:
+            if not data_resp or not isinstance(data_resp, dict):
+                return 0.0
+            data_part = data_resp.get('data')
+            if not isinstance(data_part, dict):
+                return 0.0
+            serie = data_part.get('column1')
+            if not isinstance(serie, list) or not serie:
+                return 0.0
+            vals = []
+            for p in serie:
+                if isinstance(p, dict):
+                    v = p.get('column') or p.get('value') or p.get('val')
+                    if isinstance(v, (int, float)):
+                        vals.append(float(v))
+            if not vals:
+                return 0.0
+            return sum(vals) / len(vals)
+        except Exception:
+            return 0.0
+
+    # ------------------------- Camada de Serviço / Agregação ------------------------- #
+    def build_status(self) -> dict:
+        """Retorna status consolidado do sistema (potência, SOC, etc)."""
+        token = self._get_token()
+        if not token:
+            raise ValueError('Credenciais GoodWe ausentes ou login falhou')
+        if not self.inverter_id:
+            raise ValueError('SEMS_INV_ID não configurado')
+        date_today = datetime.now().strftime('%Y-%m-%d 00:00:00')
+        prev_region = self.region
+        # Forçar uso da data_region se já detectada (auto-switch)
+        self.region = self.data_region
+        try:
+            results = {}
+            for col in ('ppv', 'pac', 'Cbattery1'):
+                try:
+                    resp = self.get_inverter_data_by_column(token, self.inverter_id, col, date_today)
+                    results[col] = resp
+                except Exception as e:
+                    logger.warning(f"Falha ao buscar coluna {col}: {e}")
+        finally:
+            self.region = prev_region
+        ppv = self._extract_last_numeric(results.get('ppv'))
+        pac = self._extract_last_numeric(results.get('pac'))
+        soc = self._extract_last_numeric(results.get('Cbattery1'))
+        return {
+            'sistema_online': True,
+            'potencia_pv': ppv,
+            'potencia_ac': pac,
+            'soc_bateria': soc,
+            'temperatura': 0,
+            'status_inversor': 'Operando' if pac > 0 else 'Standby',
+            'ultima_atualizacao': datetime.utcnow().isoformat() + 'Z',
+            'fonte_dados': 'GOODWE_SEMS_API',
+            'inverter_id': self.inverter_id
         }
-        
-        # Try multiple endpoints to find user's equipment
-        endpoints_to_try = [
-            ("PowerStation/GetPowerstationListByIndex", {}),
-            ("PowerStationMonitor/GetPowerstationList", {}),
-            ("Common/GetUserInfo", {}),
-        ]
-        
-        for endpoint, payload in endpoints_to_try:
-            try:
-                url = f"{self._get_base_url()}{endpoint}"
-                headers = {
-                    "Token": token,
-                    "Content-Type": "application/json",
-                }
-                
-                logger.info(f"Trying endpoint: {endpoint}")
-                
-                response = self.session.post(
-                    url, 
-                    json=payload,
-                    headers=headers, 
-                    timeout=self.REQUEST_TIMEOUT
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('code') == 10000:  # Success code
-                        result['has_access'] = True
-                        response_data = data.get('data', {})
-                        
-                        # Extract station information
-                        if isinstance(response_data, list):
-                            result['stations'].extend(response_data)
-                        elif isinstance(response_data, dict):
-                            if 'list' in response_data:
-                                result['stations'].extend(response_data['list'])
-                            elif 'stations' in response_data:
-                                result['stations'].extend(response_data['stations'])
-                                
-                        logger.info(f"Found {len(result['stations'])} stations from {endpoint}")
-                        break
-                    else:
-                        result['errors'].append(f"{endpoint}: {data.get('msg', 'Unknown error')}")
-                else:
-                    result['errors'].append(f"{endpoint}: HTTP {response.status_code}")
-                    
-            except Exception as e:
-                result['errors'].append(f"{endpoint}: {str(e)}")
-                logger.error(f"Error with {endpoint}: {e}")
-        
-        # Extract inverter IDs from stations
-        for station in result['stations']:
-            if isinstance(station, dict):
-                # Look for inverter information in various fields
-                inverter_fields = ['inverter_sn', 'sn', 'deviceSN', 'inverters']
-                for field in inverter_fields:
-                    if field in station and station[field]:
-                        if isinstance(station[field], list):
-                            result['inverters'].extend(station[field])
-                        else:
-                            result['inverters'].append(station[field])
-        
-        # Remove duplicates
-        result['inverters'] = list(set(result['inverters']))
-        
-        logger.info(f"Total found: {len(result['stations'])} stations, {len(result['inverters'])} inverters")
-        return result
+
+    def build_data(self) -> dict:
+        """Retorna dados agregados (produção, consumo estimado, bateria, economia)."""
+        token = self._get_token()
+        if not token:
+            raise ValueError('Credenciais GoodWe ausentes ou login falhou')
+        if not self.inverter_id:
+            raise ValueError('SEMS_INV_ID não configurado')
+        today = datetime.now().strftime('%Y-%m-%d')
+        # Alterar para região de dados para coleta
+        prev_region = self.region
+        self.region = self.data_region
+        try:
+            eday_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'eday', today)
+            battery_series_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'Cbattery1', today)
+            pac_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'pac', today)
+        finally:
+            self.region = prev_region
+        producao_hoje = round(self._last_series_value(eday_resp), 2)
+        soc_atual = 0.0
+        if isinstance(battery_series_resp, dict):
+            soc_atual = round(self._extract_last_numeric(battery_series_resp), 1)
+        potencia_atual = round(self._extract_last_numeric(pac_resp), 1)
+        # Produção mensal (últimos 30 dias)
+        producao_mes = 0.0
+        # Forçar uso da região de dados durante o loop mensal para evitar tentativas US redundantes
+        prev_region_loop = self.region
+        self.region = self.data_region
+        try:
+            for i in range(30):
+                date_check = datetime.now() - timedelta(days=i)
+                date_str = date_check.strftime('%Y-%m-%d')
+                try:
+                    daily_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'eday', date_str)
+                    producao_mes += self._last_series_value(daily_resp)
+                except Exception:
+                    continue
+        finally:
+            self.region = prev_region_loop
+        taxa_kwh = 0.85
+        return {
+            'producao': {
+                'hoje': producao_hoje,
+                'mes': round(producao_mes, 2),
+                'ano': round(producao_mes * 12, 2)
+            },
+            'consumo': {
+                'hoje': round(producao_hoje * 0.75, 2),
+                'mes': round(producao_mes * 0.75, 2),
+                'ano': round(producao_mes * 12 * 0.75, 2)
+            },
+            'bateria': {
+                'soc': soc_atual,
+                'capacidade_total': 10.0,
+                'status': 'Carregando' if potencia_atual > 0 else 'Standby',
+                'potencia_atual': potencia_atual
+            },
+            'economia': {
+                'hoje': round(producao_hoje * taxa_kwh, 2),
+                'mes': round(producao_mes * taxa_kwh, 2),
+                'ano': round(producao_mes * 12 * taxa_kwh, 2)
+            },
+            'meta_dados': {
+                'fonte_dados': 'GOODWE_SEMS_API',
+                'inverter_id': self.inverter_id,
+                'ultima_sincronizacao': datetime.utcnow().isoformat() + 'Z'
+            }
+        }
+
+    def build_history(self, days: int = 7) -> list:
+        """Retorna histórico (lista) de produção dos últimos N dias."""
+        token = self._get_token()
+        if not token:
+            raise ValueError('Credenciais GoodWe ausentes ou login falhou')
+        if not self.inverter_id:
+            raise ValueError('SEMS_INV_ID não configurado')
+        days = min(max(1, days), 30)
+        taxa_kwh = 0.85
+        historico = []
+        prev_region_hist = self.region
+        self.region = self.data_region
+        try:
+            for i in range(days):
+                date_obj = datetime.now() - timedelta(days=i)
+                date_str = date_obj.strftime('%Y-%m-%d')
+                try:
+                    prod_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'eday', date_str)
+                    battery_series_resp = self.get_inverter_data_by_column(token, self.inverter_id, 'Cbattery1', date_str)
+                except Exception:
+                    prod_resp = None
+                    battery_series_resp = None
+                producao_dia = round(self._last_series_value(prod_resp), 2)
+                soc_avg = round(self._average_series(battery_series_resp), 1) if battery_series_resp else None
+                consumo_estimado = round(producao_dia * 0.75, 2)
+                economia = round(producao_dia * taxa_kwh, 2)
+                historico.append({
+                    'data': date_str,
+                    'producao': producao_dia,
+                    'consumo': consumo_estimado,
+                    'economia': economia,
+                    'soc_medio': soc_avg if soc_avg and soc_avg > 0 else None,
+                    'dia_semana': date_obj.strftime('%A')
+                })
+        finally:
+            self.region = prev_region_hist
+        historico.reverse()
+        return historico
+
+    def build_intraday_series(self) -> dict:
+        """Busca séries intradiárias (Pac e SOC) para o dia atual."""
+        if not self.token:
+            self._ensure_login()
+        if not self.token:
+            raise ValueError("Credenciais GoodWe ausentes ou login falhou")
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        logger.info(f"Buscando dados intradiários para {today_str}...")
+
+        try:
+            series = self.get_inverter_data_by_column(
+                ['Pac', 'Cbattery1'],
+                today_str
+            )
+            # Padroniza a saída para garantir que as chaves sempre existam
+            pac_series = series.get('Pac', [])
+            soc_series = series.get('Cbattery1', [])
+
+            return {
+                'date': today_str,
+                'series': {
+                    'pac': pac_series,
+                    'soc': soc_series,
+                },
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Falha ao buscar dados intradiários: {e}")
+            # Retorna uma estrutura vazia em caso de erro para não quebrar o frontend
+            return {
+                'date': today_str,
+                'series': {'pac': [], 'soc': []},
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }

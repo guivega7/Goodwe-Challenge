@@ -6,6 +6,7 @@ TODOS os endpoints com dados simulados foram REMOVIDOS.
 """
 
 import os
+import time
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 import random
@@ -25,6 +26,22 @@ api_bp = Blueprint('api', __name__)
 
 # Inicializar clientes
 goodwe_client = GoodWeClient()
+
+# ---------------------- SIMPLE IN-MEMORY CACHE ---------------------- #
+_CACHE: dict[str, tuple[float, dict]] = {}
+
+def _cache_get(key: str):
+    item = _CACHE.get(key)
+    if not item:
+        return None
+    expires, value = item
+    if time.time() > expires:
+        _CACHE.pop(key, None)
+        return None
+    return value
+
+def _cache_set(key: str, value: dict, ttl: int):
+    _CACHE[key] = (time.time() + ttl, value)
 gemini_client = GeminiClient()
 tuya_client: TuyaClient | None = None  # Inicializado sob demanda
 
@@ -101,368 +118,88 @@ def solar_config():
 
 @api_bp.route('/api/solar/status')
 def solar_status():
-    """
-    Endpoint para status do sistema solar com dados reais da GoodWe SEMS.
-    
-    Retorna:
-        JSON: Status atual do sistema solar (SOMENTE DADOS REAIS)
-    """
+    """Status resumido (caching 30s)."""
+    cache_key = 'solar_status'
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify({**cached, '_cache': True})
     try:
-        # Obter credenciais do .env
-        account = os.getenv('SEMS_ACCOUNT')
-        password = os.getenv('SEMS_PASSWORD')
-        inverter_id = os.getenv('SEMS_INV_ID')
-        login_region = os.getenv('SEMS_LOGIN_REGION', 'us')  # Padrão US para login
-        data_region = os.getenv('SEMS_DATA_REGION', 'eu')    # Padrão EU para dados
-        
-        if not all([account, password, inverter_id]):
-            return jsonify({
-                'ok': False,
-                'error': 'Credenciais SEMS não configuradas no .env',
-                'missing': {
-                    'SEMS_ACCOUNT': bool(account),
-                    'SEMS_PASSWORD': bool(password), 
-                    'SEMS_INV_ID': bool(inverter_id)
-                }
-            }), 400
-        
-        # Fazer login na API GoodWe (usando região de login)
-        logger.info(f"Fazendo login na API GoodWe SEMS (região: {login_region})...")
-        goodwe_client.region = login_region
-        token = goodwe_client.crosslogin(account, password)
-        
-        if not token:
-            logger.error("Falha na autenticação com GoodWe SEMS")
-            return jsonify({
-                'ok': False,
-                'error': 'Falha na autenticação com GoodWe SEMS Portal',
-                'details': 'Verifique credenciais ou tente novamente mais tarde',
-                'error_type': 'SEMS_AUTH_FAILED'
-            }), 401
-        
-        # Buscar dados reais do inversor
-        logger.info(f"Buscando dados do inversor {inverter_id}...")
-        
-        # Buscar múltiplas colunas de dados (usando região de dados)
-        today = datetime.now().strftime('%Y-%m-%d')
-        columns = ['ppv', 'pac', 'soc', 'temperature']  # potência PV, AC, SOC bateria, temperatura
-        
-        # Alterar para região de dados para buscar informações
-        goodwe_client.region = data_region
-        inverter_data = goodwe_client.get_multiple_columns_data(
-            token=token,
-            inverter_id=inverter_id,
-            date=today,
-            columns=columns
-        )
-        
-        if not inverter_data:
-            return jsonify({
-                'ok': False,
-                'error': 'Não foi possível obter dados do inversor',
-                'details': 'Inversor pode estar offline ou sem dados para hoje'
-            }), 503
-        
-        # Processar dados reais
-        latest_data = {}
-        for column, data_points in inverter_data.items():
-            if data_points:
-                # Pegar o último valor disponível
-                latest_data[column] = data_points[-1][1] if len(data_points[-1]) > 1 else 0
-        
-        status_data = {
-            'sistema_online': True,
-            'potencia_pv': latest_data.get('ppv', 0),  # Potência PV atual
-            'potencia_ac': latest_data.get('pac', 0),  # Potência AC atual
-            'soc_bateria': latest_data.get('soc', 0),  # Estado de carga da bateria
-            'temperatura': latest_data.get('temperature', 0),
-            'status_inversor': 'Operando',
-            'ultima_atualizacao': datetime.now().isoformat(),
-            'fonte_dados': 'GOODWE_SEMS_API',
-            'inverter_id': inverter_id
-        }
-        
-        return jsonify({
-            'ok': True,
-            'data': status_data,
-            'timestamp': datetime.now().isoformat()
-        })
-        
+        data = goodwe_client.build_status()
+        payload = {'ok': True, 'data': data, 'timestamp': datetime.now().isoformat()}
+        _cache_set(cache_key, payload, ttl=30)
+        return jsonify({**payload, '_cache': False})
+    except ValueError as ve:
+        return jsonify({'ok': False, 'error': str(ve)}), 400
     except Exception as e:
-        logger.error(f"Erro ao obter status solar real: {e}")
-        return jsonify({
-            'ok': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
+        logger.error(f"Erro /api/solar/status: {e}")
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
 
 
 @api_bp.route('/api/solar/data')
 def solar_data():
-    """
-    Endpoint para dados completos do sistema solar com dados reais da GoodWe SEMS.
-    
-    Retorna:
-        JSON: Dados de produção, consumo, bateria e economia (SOMENTE DADOS REAIS)
-    """
+    """Dados agregados (caching 120s)."""
+    cache_key = 'solar_data'
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify({**cached, '_cache': True})
     try:
-        # Obter credenciais do .env
-        account = os.getenv('SEMS_ACCOUNT')
-        password = os.getenv('SEMS_PASSWORD')
-        inverter_id = os.getenv('SEMS_INV_ID')
-        login_region = os.getenv('SEMS_LOGIN_REGION', 'us')
-        data_region = os.getenv('SEMS_DATA_REGION', 'eu')
-        
-        if not all([account, password, inverter_id]):
-            return jsonify({
-                'ok': False,
-                'error': 'Credenciais SEMS não configuradas no .env'
-            }), 400
-        
-        # Fazer login na API GoodWe
-        goodwe_client.region = login_region
-        token = goodwe_client.crosslogin(account, password)
-        
-        if not token:
-            return jsonify({
-                'ok': False,
-                'error': 'Falha na autenticação com GoodWe SEMS'
-            }), 401
-        
-        # Alterar para região de dados
-        goodwe_client.region = data_region
-        
-        # Buscar dados de hoje
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        # Buscar dados de produção diária (eday)
-        producao_hoje_data = goodwe_client.get_inverter_data_by_column(
-            token=token,
-            inverter_id=inverter_id,
-            column='eday',
-            date=today
-        )
-        
-        producao_hoje = 0
-        if producao_hoje_data:
-            producao_hoje = sum([float(point[1]) for point in producao_hoje_data if len(point) > 1])
-        
-        # Buscar dados de bateria (SOC)
-        soc_data = goodwe_client.get_inverter_data_by_column(
-            token=token,
-            inverter_id=inverter_id,
-            column='soc',
-            date=today
-        )
-        
-        soc_atual = 0
-        if soc_data and len(soc_data) > 0:
-            soc_atual = float(soc_data[-1][1]) if len(soc_data[-1]) > 1 else 0
-        
-        # Buscar dados de potência AC (PAC)
-        pac_data = goodwe_client.get_inverter_data_by_column(
-            token=token,
-            inverter_id=inverter_id,
-            column='pac',
-            date=today
-        )
-        
-        potencia_atual = 0
-        if pac_data and len(pac_data) > 0:
-            potencia_atual = float(pac_data[-1][1]) if len(pac_data[-1]) > 1 else 0
-        
-        # Buscar dados mensais (últimos 30 dias)
-        producao_mes = 0
-        current_date = datetime.now()
-        
-        for i in range(30):
-            date_check = current_date - timedelta(days=i)
-            date_str = date_check.strftime('%Y-%m-%d')
-            
-            daily_data = goodwe_client.get_inverter_data_by_column(
-                token=token,
-                inverter_id=inverter_id,
-                column='eday',
-                date=date_str
-            )
-            
-            if daily_data:
-                day_production = sum([float(point[1]) for point in daily_data if len(point) > 1])
-                producao_mes += day_production
-        
-        # Calcular dados estimados baseados na produção real
-        # Assumindo um consumo de 70-80% da produção e economia baseada na tarifa
-        taxa_kwh = 0.85  # R$ por kWh (estimativa)
-        
-        dados = {
-            'producao': {
-                'hoje': round(producao_hoje, 2),
-                'mes': round(producao_mes, 2),
-                'ano': round(producao_mes * 12, 2)  # Estimativa anual baseada no mês
-            },
-            'consumo': {
-                'hoje': round(producao_hoje * 0.75, 2),  # Estimativa baseada na produção
-                'mes': round(producao_mes * 0.75, 2),
-                'ano': round(producao_mes * 12 * 0.75, 2)
-            },
-            'bateria': {
-                'soc': round(soc_atual, 1),
-                'capacidade_total': 10.0,  # Capacidade padrão - pode ser configurável
-                'status': 'Carregando' if potencia_atual > 0 else 'Standby',
-                'potencia_atual': round(potencia_atual, 1)
-            },
-            'economia': {
-                'hoje': round(producao_hoje * taxa_kwh, 2),
-                'mes': round(producao_mes * taxa_kwh, 2),
-                'ano': round(producao_mes * 12 * taxa_kwh, 2)
-            },
-            'meta_dados': {
-                'fonte_dados': 'GOODWE_SEMS_API',
-                'inverter_id': inverter_id,
-                'ultima_sincronizacao': datetime.now().isoformat()
-            }
-        }
-        
-        return jsonify({
-            'ok': True,
-            'data': dados,
-            'timestamp': datetime.now().isoformat()
-        })
-        
+        dados = goodwe_client.build_data()
+        payload = {'ok': True, 'data': dados, 'timestamp': datetime.now().isoformat()}
+        _cache_set(cache_key, payload, ttl=120)
+        return jsonify({**payload, '_cache': False})
+    except ValueError as ve:
+        return jsonify({'ok': False, 'error': str(ve)}), 400
     except Exception as e:
-        logger.error(f"Erro ao obter dados solares reais: {e}")
-        return jsonify({
-            'ok': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
+        logger.error(f"Erro /api/solar/data: {e}")
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
 
 
 @api_bp.route('/api/solar/history')
 def solar_history():
-    """
-    Endpoint para histórico real de dados solares dos últimos dias.
-    
-    Query Parameters:
-        days (int): Número de dias de histórico (padrão: 7, máximo: 30)
-    
-    Retorna:
-        JSON: Histórico real dos últimos dias
-    """
+    """Histórico de produção (caching 600s)."""
     try:
-        # Obter parâmetro de dias
-        days = min(int(request.args.get('days', 7)), 30)  # Máximo 30 dias
-        
-        # Obter credenciais do .env
-        account = os.getenv('SEMS_ACCOUNT')
-        password = os.getenv('SEMS_PASSWORD')
-        inverter_id = os.getenv('SEMS_INV_ID')
-        login_region = os.getenv('SEMS_LOGIN_REGION', 'us')
-        data_region = os.getenv('SEMS_DATA_REGION', 'eu')
-        
-        if not all([account, password, inverter_id]):
-            return jsonify({
-                'ok': False,
-                'error': 'Credenciais SEMS não configuradas no .env'
-            }), 400
-        
-        # Fazer login na API GoodWe
-        goodwe_client.region = login_region
-        token = goodwe_client.crosslogin(account, password)
-        
-        if not token:
-            return jsonify({
-                'ok': False,
-                'error': 'Falha na autenticação com GoodWe SEMS'
-            }), 401
-        
-        # Alterar para região de dados
-        goodwe_client.region = data_region
-        
-        # Buscar histórico real
-        historico = []
-        taxa_kwh = 0.85  # R$ por kWh
-        
-        for i in range(days):
-            date_obj = datetime.now() - timedelta(days=i)
-            date_str = date_obj.strftime('%Y-%m-%d')
-            
-            # Buscar produção do dia
-            producao_data = goodwe_client.get_inverter_data_by_column(
-                token=token,
-                inverter_id=inverter_id,
-                column='eday',
-                date=date_str
-            )
-            
-            producao_dia = 0
-            if producao_data:
-                producao_dia = sum([float(point[1]) for point in producao_data if len(point) > 1])
-            
-            # Buscar SOC médio do dia
-            soc_data = goodwe_client.get_inverter_data_by_column(
-                token=token,
-                inverter_id=inverter_id,
-                column='soc',
-                date=date_str
-            )
-            
-            soc_medio = 0
-            if soc_data:
-                soc_values = [float(point[1]) for point in soc_data if len(point) > 1 and point[1] is not None]
-                if soc_values:
-                    soc_medio = sum(soc_values) / len(soc_values)
-            
-            # Calcular consumo estimado (75% da produção)
-            consumo_estimado = producao_dia * 0.75
-            
-            # Calcular economia baseada na produção
-            economia_dia = producao_dia * taxa_kwh
-            
-            historico.append({
-                'data': date_str,
-                'producao': round(producao_dia, 2),
-                'consumo': round(consumo_estimado, 2),
-                'economia': round(economia_dia, 2),
-                'soc_medio': round(soc_medio, 1) if soc_medio > 0 else None,
-                'dia_semana': date_obj.strftime('%A')
-            })
-        
-        # Ordenar por data (mais recente primeiro)
-        historico.reverse()
-        
-        return jsonify({
+        days = int(request.args.get('days', 7))
+        days_clamped = min(max(1, days), 30)
+        cache_key = f'solar_history_{days_clamped}'
+        cached = _cache_get(cache_key)
+        if cached:
+            return jsonify({**cached, '_cache': True})
+        historico = goodwe_client.build_history(days_clamped)
+        payload = {
             'ok': True,
             'data': historico,
-            'periodo': f'{days}_dias',
+            'periodo': f'{days_clamped}_dias',
             'fonte_dados': 'GOODWE_SEMS_API',
-            'inverter_id': inverter_id,
+            'inverter_id': goodwe_client.inverter_id,
             'timestamp': datetime.now().isoformat()
-        })
-        
+        }
+        _cache_set(cache_key, payload, ttl=600)
+        return jsonify({**payload, '_cache': False})
+    except ValueError as ve:
+        return jsonify({'ok': False, 'error': str(ve)}), 400
     except Exception as e:
-        logger.error(f"Erro ao obter histórico solar real: {e}")
-        return jsonify({
-            'ok': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
+        logger.error(f"Erro /api/solar/history: {e}")
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
 
 
-@api_bp.route('/api/smartplug/status')
-def smartplug_status():
-    """Status da tomada inteligente (Tuya)."""
+@api_bp.route('/api/solar/intraday')
+def solar_intraday_series():
+    """Séries intradiárias (Pac, SOC) para o dia atual (caching 5 min)."""
+    cache_key = 'solar_intraday'
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify({**cached, '_cache': True})
     try:
-        client = _get_tuya_client()
-        data = client.simple_snapshot()
-        return jsonify({
-            'ok': True,
-            'data': data,
-            'fonte': 'TUYA_API'
-        })
+        series_data = goodwe_client.build_intraday_series()
+        payload = {'ok': True, 'data': series_data, 'timestamp': datetime.now().isoformat()}
+        # Cache mais curto para dados que mudam com frequência
+        _cache_set(cache_key, payload, ttl=300) # 5 minutos
+        return jsonify({**payload, '_cache': False})
+    except ValueError as ve:
+        return jsonify({'ok': False, 'error': str(ve)}), 400
     except Exception as e:
-        return jsonify({
-            'ok': False,
-            'error': str(e),
-            'fonte': 'TUYA_API'
-        }), 500
+        logger.error(f"Erro /api/solar/intraday: {e}")
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
 
 
 @api_bp.route('/api/smartplug/energy')

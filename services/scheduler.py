@@ -43,7 +43,7 @@ def _parse_hhmm(value: str, default: str) -> tuple[int, int]:
 
 def _get_tz() -> pytz.BaseTzInfo:
     # Aceitar TIMEZONE, TZ (mantendo retrocompatibilidade)
-    tzname = os.getenv("TIMEZONE") or os.getenv("TZ") or "America/Sao_Paulo"
+    tzname = os.getenv("TIMEZONE") or os.getenv("TZ") or "UTC"
     try:
         return pytz.timezone(tzname)
     except Exception:
