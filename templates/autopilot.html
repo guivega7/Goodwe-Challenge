@@ -67,9 +67,9 @@
             <div class="col">
                 <div class="card text-center h-100" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);">
                     <div class="card-body">
-                        <h6 class="card-title">{{ dia.data.split(' ')[0] | format_date }}</h6>
+                        <h6 class="card-title" style="color: white;">{{ dia.data.split(' ')[0] | format_date }}</h6>
                         <img src="{{ obter_icone_url(dia.icone) }}" alt="{{ dia.descricao }}" width="60" height="60">
-                        <p class="fw-bold mb-1">{{ "%.1f"|format(dia.temperatura) }}°C</p>
+                        <p class="fw-bold mb-1" style="color: white;">{{ "%.1f"|format(dia.temperatura) }}°C</p>
                         <small class="text-light text-capitalize">{{ dia.descricao }}</small>
                     </div>
                 </div>

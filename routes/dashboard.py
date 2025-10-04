@@ -102,6 +102,33 @@ def dashboard():
 
     if fonte_escolhida == 'mock':
         mock = get_mock_event()
+        # Gerar séries mock para gráficos
+        today = datetime.now().strftime('%Y-%m-%d')
+        # Histórico 7 dias já está no relatorio, mas também produziremos Eday (dia atual ponto a ponto por hora)
+        eday_series = []
+        acumulado = 0.0
+        for h in range(6, 19):  # geração das 06h às 18h
+            import random
+            incremento = round(random.uniform(0.3, 0.7), 2)
+            acumulado = round(acumulado + incremento, 2)
+            eday_series.append([f"{today} {h:02d}:00:00", acumulado])
+        # Pac simulado (seno simplificado) + zeros fora do período
+        pac_series = []
+        for h in range(24):
+            if 6 <= h <= 18:
+                pac = round(2.5 * (1 - abs(12 - h)/6), 2)  # pico perto do meio dia
+            else:
+                pac = 0.0
+            pac_series.append([f"{today} {h:02d}:00:00", pac])
+        # SOC bateria (leve descarga noturna + carga diurna)
+        soc_series = []
+        soc_val = 63.0
+        for h in range(24):
+            if 6 <= h <= 14:
+                soc_val = min(95.0, soc_val + 2.0)  # carregando
+            elif 18 <= h <= 23:
+                soc_val = max(40.0, soc_val - 1.5)  # descarregando
+            soc_series.append([f"{today} {h:02d}:00:00", round(soc_val, 1)])
         relatorio = {
             'potencia_atual': mock.get("geracao", 3.2),
             'energia_hoje': 8.5,
@@ -121,7 +148,18 @@ def dashboard():
             'data_update': datetime.now().strftime('%d/%m/%Y %H:%M'),
             'fonte_dados': 'Dados Simulados (Mock)'
         }
-        return render_template('dashboard.html', relatorio=relatorio, data={}, timestamp=mock.get("timestamp", timestamp))
+        series_data = {
+            'Eday': eday_series,
+            'Pac': pac_series,
+            'Cbattery1': soc_series
+        }
+        battery_data = [v for _, v in soc_series]
+        # Dados mensais simulados (kWh) e anuais (últimos 5 anos)
+        import random
+        monthly_data = [round(random.uniform(120, 210), 1) for _ in range(12)]
+        current_year_total = round(sum(monthly_data), 1)
+        annual_data = [round(current_year_total * f, 1) for f in (0.72, 0.81, 0.9, 0.95, 1.0)]
+    return render_template('dashboard.html', relatorio=relatorio, data=series_data, battery_data=battery_data, monthly_data=monthly_data, annual_data=annual_data, timestamp=mock.get("timestamp", timestamp))
 
     # fonte = api
     try:
@@ -151,8 +189,25 @@ def dashboard():
         series_data = {
             'Eday': [[h['data'], h['producao']] for h in historico],
             'Pac': [],  # não exposto diretamente via build_data (poderia ser adicionado futuramente)
-            'Cbattery1': []  # média diária já representada; série completa exigiria endpoint separado
+            'Cbattery1': []  # será preenchido com dados reais se disponíveis
         }
+        
+        # Tentar buscar dados reais de Cbattery1
+        try:
+            # Garantir que as credenciais estão carregadas
+            client._load_env_credentials()
+            # Obter token válido
+            token = client._get_token()
+            if token:
+                today = datetime.now().strftime('%Y-%m-%d')
+                battery_data = client.get_inverter_data_by_column(token, client.inverter_id, 'Cbattery1', today)
+                if battery_data and isinstance(battery_data, dict) and 'data' in battery_data and 'column1' in battery_data['data']:
+                    # Extrair dados da série temporal (formato: [['data', valor], ...])
+                    column1_data = battery_data['data']['column1']
+                    series_data['Cbattery1'] = [[point['date'], point['column']] for point in column1_data]
+                    logger.info(f"Dados de Cbattery1 obtidos com sucesso: {len(column1_data)} pontos")
+        except Exception as e:
+            logger.warning(f"Erro ao buscar dados de Cbattery1: {e}")
         
         # Se não há dados reais para Pac e Cbattery1, gerar simulados
         if not series_data.get('Pac'):
@@ -165,8 +220,36 @@ def dashboard():
             import random
             today = datetime.now().strftime('%Y-%m-%d')
             series_data['Cbattery1'] = [[f"{today} {h:02d}:00:00", round(random.uniform(74, 76), 1)] for h in range(24)]
-        
-        return render_template('dashboard.html', relatorio=relatorio, data=series_data, timestamp=timestamp)
+        # Construir dados mensais e anuais básicos (aproximação) para preencher gráficos
+        # Estratégia: fazer um loop de até 90 dias atrás para reduzir carga e distribuir em meses
+        monthly_map: dict[str, float] = {}
+        try:
+            token_scan = client._get_token()
+            if token_scan:
+                from datetime import timedelta
+                for i in range(0, 90):  # últimos ~3 meses
+                    dcheck = datetime.now() - timedelta(days=i)
+                    date_key = dcheck.strftime('%Y-%m-%d 00:00:00')
+                    try:
+                        daily_resp = client.get_inverter_data_by_column(token_scan, client.inverter_id, 'eday', date_key)
+                        kwh = client._last_series_value(daily_resp)
+                        ym = dcheck.strftime('%Y-%m')
+                        monthly_map[ym] = monthly_map.get(ym, 0.0) + kwh
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        # Montar lista de 12 meses (Jan..Dez) usando ano atual, preenchendo com 0 se não coletado
+        from calendar import month_name
+        current_year = datetime.now().year
+        monthly_data = []
+        for m in range(1, 13):
+            ym_key = f"{current_year}-{m:02d}"
+            monthly_data.append(round(monthly_map.get(ym_key, 0.0), 2))
+        # Dados anuais: usar valor anual estimado (producao_mes*12) para ano atual e degradar anos anteriores
+        ano_atual_estimado = dados['producao']['ano']
+        annual_data = [round(ano_atual_estimado * f, 2) for f in (0.8, 0.85, 0.9, 0.95, 1.0)]
+        return render_template('dashboard.html', relatorio=relatorio, data=series_data, monthly_data=monthly_data, annual_data=annual_data, timestamp=timestamp)
     except Exception as e:
         logger.error(f"Erro dashboard(api): {e}")
         flash("Erro ao carregar dados reais — mostrando mock.", "warning")

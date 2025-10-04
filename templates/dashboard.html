@@ -311,46 +311,6 @@
   </div>
 </div>
 
-<!-- Dados da API SEMS -->
-{% if request.args.get('fonte') == 'api' and data and (data['Cbattery1'] or data['Pac'] or data['Eday']) %}
-<div class="row mb-4">
-  <div class="col-12">
-    <div class="glass p-4">
-      <div class="d-flex align-items-center mb-3">
-        <i class="fa-solid fa-database fa-2x me-3" style="color:#FE5800;"></i>
-        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Dados da API SEMS (GoodWe)</h5>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-dark table-striped table-bordered align-middle">
-          <thead>
-            <tr>
-              <th>Data/Hora</th>
-              <th>Cbattery1 (%)</th>
-              <th>Pac (kW)</th>
-              <th>Eday (kWh)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% set max_len = [data['Cbattery1']|length if data['Cbattery1'] else 0, data['Pac']|length if data['Pac'] else 0, data['Eday']|length if data['Eday'] else 0]|max %}
-            {% for i in range(max_len) %}
-            <tr>
-              <td>{{ data['Cbattery1'][i][0] if data['Cbattery1'] and i < data['Cbattery1']|length else (data['Pac'][i][0] if data['Pac'] and i < data['Pac']|length else (data['Eday'][i][0] if data['Eday'] and i < data['Eday']|length else '')) }}</td>
-              <td>{{ data['Cbattery1'][i][1] if data['Cbattery1'] and i < data['Cbattery1']|length else '-' }}</td>
-              <td>{{ data['Pac'][i][1] if data['Pac'] and i < data['Pac']|length else '-' }}</td>
-              <td>{{ data['Eday'][i][1] if data['Eday'] and i < data['Eday']|length else '-' }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="text-end text-light small mt-2">
-        Fonte: GoodWe SEMS API | SN: <b>{{ request.args.get('sn', relatorio.fonte_dados.split(':')[-1]|trim) }}</b>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
 <!-- Gráficos Combinados -->
 <div class="row g-4 mb-4">
   <!-- Gráfico Histórico 7 Dias -->
@@ -406,6 +366,21 @@
   </div>
 </div>
 
+<!-- Gráfico Estado da Bateria -->
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="glass p-4">
+      <div class="d-flex align-items-center mb-3">
+        <i class="fa-solid fa-battery-half fa-2x me-3" style="color:#FE5800;"></i>
+        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Estado da Bateria Hoje</h5>
+      </div>
+      <div style="position: relative; height: 300px;">
+        <canvas id="graficoBateria"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Controles de Configuração -->
 <div class="row g-4 mb-4">
   <div class="col-12">
@@ -446,7 +421,14 @@
 // ================== DASHBOARD DINÂMICO ==================
 const fonteSelecionada = new URLSearchParams(window.location.search).get('fonte') || 'mock';
 console.log('Fonte selecionada:', fonteSelecionada);
-let chartHistorico, chartDistribuicao, chartMensal, chartAnual;
+let chartHistorico, chartDistribuicao, chartBateria;
+// Pacote de dados adicionais (mensal/annual) serializado em um objeto
+const _extraData = JSON.parse(String.raw`{{ ({
+  'monthly': monthly_data if monthly_data is defined else None,
+  'annual': annual_data if annual_data is defined else None
+}) | tojson | safe }}`);
+const monthlyData = _extraData.monthly;
+const annualData = _extraData.annual;
 
 function fmt(num){ if(num===undefined||num===null||isNaN(num)) return 0; return Math.round(num*100)/100; }
 async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
@@ -499,7 +481,7 @@ async function carregarData(){
 }
 
 async function carregarHistorico(){ 
-    if(fonteSelecionada!=='api') return; 
+  if(fonteSelecionada!=='api') return; 
     try{ 
         console.log('Carregando histórico...');
         const res = await fetchJSON('/api/solar/history?days=7'); 
@@ -510,23 +492,56 @@ async function carregarHistorico(){
         const labels = hist.map(h=> h.data.slice(5)); 
         const geracao = hist.map(h=> fmt(h.producao)); 
         const consumo = geracao.map(v=> fmt(v*0.8)); // Consumo estimado
-        atualizarHistorico(labels, geracao, consumo); 
-        atualizarMensalEstimado(hist); 
-        atualizarAnualEstimado(hist); 
+  atualizarHistorico(labels, geracao, consumo); 
     } catch(e){ console.warn('history fail', e);} 
 }
 
 function initCharts(){
   chartHistorico = new Chart(document.getElementById('graficoHistorico'), { type:'line', data:{ labels:[], datasets:[ {label:'Energia Gerada (kWh)', data:[], borderColor:'#FE5800', backgroundColor:'rgba(254,88,0,0.15)', tension:0.35, fill:true}, {label:'Energia Consumida (kWh)', data:[], borderColor:'#17a2b8', backgroundColor:'rgba(23,162,184,0.15)', tension:0.35, fill:true} ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
   chartDistribuicao = new Chart(document.getElementById('graficoDistribuicao'), { type:'doughnut', data:{ labels:['Energia Gerada','Energia Consumida','Excedente'], datasets:[{ data:[0,0,0], backgroundColor:['#FE5800','#17a2b8','#28a745'], borderColor:'#fff', borderWidth:2 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:'#fff', padding:20 } } } } });
-  chartMensal = new Chart(document.getElementById('graficoMensal'), { type:'bar', data:{ labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], datasets:[{ label:'Geração Mensal (kWh)', data:Array(12).fill(0), backgroundColor:'#FE5800', borderRadius:8 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
-  chartAnual = new Chart(document.getElementById('graficoAnual'), { type:'line', data:{ labels:[new Date().getFullYear()-4, new Date().getFullYear()-3, new Date().getFullYear()-2, new Date().getFullYear()-1, new Date().getFullYear()], datasets:[{ label:'Geração Anual (kWh)', data:[0,0,0,0,0], borderColor:'#28a745', backgroundColor:'rgba(40,167,69,0.15)', tension:0.35, fill:true }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
+  chartBateria = new Chart(document.getElementById('graficoBateria'), { type:'line', data:{ labels:[], datasets:[{label:'SOC Bateria (%)', data:[], borderColor:'#00bfff', backgroundColor:'rgba(0,191,255,0.15)', tension:0.35, fill:true}]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, max:100, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
+  if (monthlyData) {
+    const ctxM = document.getElementById('graficoMensal');
+    if (ctxM) {
+      new Chart(ctxM, { type:'bar', data:{ labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], datasets:[{ label:'Geração Mensal (kWh)', data: monthlyData, backgroundColor:'#FE5800', borderRadius:8 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'} }, x:{ ticks:{color:'#fff'} } } } });
+    }
+  }
+  if (annualData) {
+    const ctxA = document.getElementById('graficoAnual');
+    if (ctxA) {
+      const currentYear = new Date().getFullYear();
+      const labelsA = [currentYear-4, currentYear-3, currentYear-2, currentYear-1, currentYear];
+      new Chart(ctxA, { type:'line', data:{ labels: labelsA, datasets:[{ label:'Geração Anual (kWh)', data: annualData, borderColor:'#28a745', backgroundColor:'rgba(40,167,69,0.15)', tension:0.35, fill:true }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'} }, x:{ ticks:{color:'#fff'} } } } });
+    }
+  }
 }
 
 function atualizarHistorico(labels, geracao, consumo){ if(!chartHistorico) return; chartHistorico.data.labels = labels; chartHistorico.data.datasets[0].data = geracao; chartHistorico.data.datasets[1].data = consumo; chartHistorico.update(); }
 function atualizarDistribuicao(gerado, consumido){ if(!chartDistribuicao) return; const excedente = Math.max(0, fmt(gerado - consumido)); chartDistribuicao.data.datasets[0].data = [fmt(gerado), fmt(consumido), excedente]; chartDistribuicao.update(); }
-function atualizarMensalEstimado(hist){ const now = new Date(); const mesIdx = now.getMonth(); const soma = hist.reduce((acc,h)=>{ const d=new Date(h.data); return d.getMonth()===mesIdx ? acc + h.producao : acc; },0); chartMensal.data.datasets[0].data[mesIdx] = fmt(soma); chartMensal.update(); }
-function atualizarAnualEstimado(hist){ const ano = new Date().getFullYear(); const somaAno = hist.reduce((acc,h)=>{ const d=new Date(h.data); return d.getFullYear()===ano ? acc + h.producao : acc; },0); chartAnual.data.datasets[0].data[4] = fmt(somaAno); chartAnual.update(); }
+// Função para popular gráficos em modo mock usando dados backend (injetados em 'data')
+function popularMock(){
+  try {
+    const backend = JSON.parse(String.raw`{{ data|tojson|safe }}`);
+    if(!backend || !backend.Eday) return;
+    // Histórico 7 dias (já vem no relatorio) – usamos apenas Eday de hoje para linha? manter simples
+    const eday = backend.Eday;
+    const labelsHist = eday.map(p => p[0].slice(11,16));
+    const geracao = eday.map((p,i)=> i===0? fmt(p[1]) : fmt(p[1]));
+    const consumo = geracao.map(v=> fmt(v*0.8));
+    atualizarHistorico(labelsHist, geracao, consumo);
+    // Distribuição (último valor)
+    const prodHoje = geracao.length ? geracao[geracao.length-1] : 0;
+    atualizarDistribuicao(prodHoje, fmt(prodHoje*0.75));
+    // Bateria
+    if(backend.Cbattery1){
+      const labelsBat = backend.Cbattery1.map(p => p[0].slice(11,16));
+      const socVals = backend.Cbattery1.map(p => p[1]);
+      chartBateria.data.labels = labelsBat;
+      chartBateria.data.datasets[0].data = socVals;
+      chartBateria.update();
+    }
+  } catch(err){ console.warn('popularMock falhou', err); }
+}
 
 async function cicloRefresh(){ 
     console.log('Iniciando cicloRefresh para fonte:', fonteSelecionada);
@@ -545,6 +560,8 @@ if(fonteSelecionada==='api'){
   setInterval(()=> carregarHistorico(), 300000);
 } else {
   console.log('Modo mock, sem refresh');
+  // Popular gráficos imediatamente com dados mock do backend
+  popularMock();
 }
 
 // Insights geração (já existia) - manter se necessário

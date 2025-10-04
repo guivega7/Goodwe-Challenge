@@ -1,11 +1,17 @@
 # 🌞 SolarMind - Sistema Inteligente de Monitoramento Solar
 
+> Release estável (fase final de refinamento) 💪
+
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)](https://flask.palletsprojects.com/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-orange.svg)](https://sqlalchemy.org)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 Sistema inteligente para monitoramento e controle de energia solar com integração a assistentes virtuais e automação residencial.
+
+> TL;DR Rápido:
+> 1. clone repo  2. python -m venv venv & ativar  3. pip install -r requirements.txt  4. copie `.env.example` para `.env`  5. python init_db.py  6. python app.py  7. Acesse http://localhost:5000/dashboard?fonte=mock
+> Para dados reais GoodWe, preencha SEMS_* no .env e use `?fonte=api`.
 
 ## 🚀 Funcionalidades Principais
 
@@ -31,6 +37,128 @@ Sistema inteligente para monitoramento e controle de energia solar com integraç
 - **Status do Sistema**: Monitoramento em tempo real do sistema fotovoltaico
 - **Alertas de Manutenção**: Notificações preventivas
 - **Análise de Eficiência**: Relatórios detalhados de performance
+- **SOC da Bateria (Cbattery1)**: Visualização intradiária do estado de carga
+
+## 🔌 Integração GoodWe SEMS (Dados Reais)
+Para habilitar dados reais no dashboard (modo `api`), configure no `.env`:
+```
+SEMS_ACCOUNT=seu_email_goodwe
+SEMS_PASSWORD=sua_senha_goodwe
+SEMS_INV_ID=serial_inversor
+SEMS_LOGIN_REGION=us   # ou eu (região para login)
+SEMS_DATA_REGION=eu    # região preferida de dados (auto‑switch ocorre se diferente)
+```
+A aplicação tentará automaticamente alternar para a região correta se receber `code=100002`.
+
+### Alternando entre Dados Simulados e API
+O dashboard suporta dois modos:
+- `mock`: dados simulados (padrão) – `http://localhost:5000/dashboard?fonte=mock`
+- `api`: dados reais da GoodWe – `http://localhost:5000/dashboard?fonte=api`
+
+No modo `api` o backend busca:
+- Produção diária (coluna `eday`)
+- Potência AC (`pac`)
+- SOC bateria (`Cbattery1`)
+
+Se a série vier vazia, o log mostrará linhas como:
+```
+[GoodWe][build_data] eday: code=0 pontos=0 | Cbattery1: code=0 pontos=0 | pac: code=0 pontos=0
+```
+Indicando ausência de pontos para aquele dia.
+
+### Principais Endpoints Solares
+| Endpoint | Descrição | Cache |
+|----------|-----------|-------|
+| `GET /api/solar/status` | Status resumido (potência, SOC, etc.) | 30s |
+| `GET /api/solar/data` | Agregado produção/consumo/bateria/economia | 120s |
+| `GET /api/solar/history?days=7` | Histórico últimos N dias (1–30) | 600s |
+| `GET /api/solar/intraday` | (Planejado) Séries intradiárias Pac & SOC | 300s |
+
+## 🖥️ Dashboard Atualizado (v2.1)
+Visão geral dos gráficos disponíveis na versão 2.1:
+- Produção diária (kWh) e potência instantânea (Pac)
+- Estado de carga da bateria (SOC) intradiário
+- Distribuição/Resumo (consumo x produção) – modo simulado preenche automaticamente
+- Gráfico Mensal (últimos meses com dados reais ou simulação em modo mock)
+- Gráfico Anual (acúmulo estimado a partir dos meses disponíveis / simulado em mock)
+
+Notas técnicas:
+- Em modo `api`, meses além da janela de varredura (atual ~90 dias) podem aparecer como 0 até implementação de agregação histórica completa
+- Em modo `mock`, todos os gráficos são preenchidos para demonstrar a UI
+- Logging detalhado ajuda a diferenciar série realmente vazia de valor 0 legítimo
+- Datas nas consultas GoodWe usam formato `YYYY-MM-DD 00:00:00` para maior compatibilidade
+
+To toggle real vs simulated data, use `?fonte=api` ou `?fonte=mock` na rota `/dashboard`.
+
+Trecho de log esperado quando uma coluna retorna sem pontos:
+```
+[GoodWe][build_data] eday: code=0 pontos=0 | Cbattery1: code=0 pontos=0 | pac: code=0 pontos=0
+```
+
+Se aparecer `code=100002`, a aplicação tenta automaticamente alternar a região (US ↔ EU).
+
+> Dica: Ative DEBUG apenas em desenvolvimento. Em produção use `FLASK_DEBUG=false` e configure uma SECRET_KEY forte.
+
+---
+
+## 🔧 Variáveis de Ambiente
+
+Crie um arquivo `.env` (ou use variáveis diretas no ambiente) com as chaves abaixo conforme os módulos que deseja ativar.
+
+| Categoria | Variável | Obrigatório | Default / Exemplo | Descrição |
+|-----------|----------|-------------|-------------------|-----------|
+| Core | `SECRET_KEY` | Produção | `dev-key-change-in-production` | Chave Flask para sessões e cookies. Use valor forte em prod |
+| Core | `DATABASE_URL` | Não | `sqlite:///solarmind.db` | URL SQLAlchemy (pode usar Postgres, etc) |
+| Core | `FLASK_DEBUG` | Não | `false` | Ativa modo debug |
+| Scheduler | `ENABLE_SCHEDULER` | Não | `true` | Inicia jobs APScheduler |
+| Scheduler | `DAILY_SUMMARY_TIME` | Não | `21:30` | Horário (HH:MM) resumo diário |
+| Scheduler | `AUTOPILOT_ANNOUNCE_TIME` | Não | `08:00` | Horário anúncio Autopilot |
+| Scheduler | `TIMEZONE` / `TZ` | Não | `UTC` | Fuso horário dos cron jobs |
+| Scheduler | `SMARTPLUG_INTERVAL` | Se usar SmartPlug | `60` | Intervalo coleta leituras (segundos) |
+| Scheduler | `ENABLE_DEVICE_SYNC` | Não | `true` | Liga/Desliga sync periódico de devices Tuya |
+| Scheduler | `DEVICE_SYNC_INTERVAL` | Não | `1800` | Intervalo sync Tuya (s) |
+| Autopilot | `AUTOPILOT_SOC_DEFAULT` | Não | `35` | SOC base para plano diário (fallback) |
+| Autopilot | `AUTOPILOT_FORECAST_DEFAULT` | Não | `8` | Geração prevista (kWh) fallback |
+| IFTTT | `IFTTT_WEBHOOK_URL` | Se usar alertas | - | URL base Webhooks IFTTT |
+| IFTTT | `IFTTT_KEY` | Se usar alertas | - | Key do serviço Webhooks |
+| IA (Gemini) | `ENABLE_GEMINI` | Não | `true` | Liga/desliga recursos IA |
+| IA (Gemini) | `GEMINI_API_KEY` | Se IA ativa | - | API Key Google Gemini |
+| IA (Gemini) | `GEMINI_MODEL` | Não | `gemini-1.5-flash` | Modelo usado |
+| IA (Gemini) | `GEMINI_TIMEOUT` | Não | `30` | Timeout requisições (s) |
+| IA (Gemini) | `GEMINI_MAX_TOKENS` | Não | `1000` | Limite tokens saída |
+| GoodWe | `SEMS_ACCOUNT` | Para dados reais | - | Email conta GoodWe |
+| GoodWe | `SEMS_PASSWORD` | Para dados reais | - | Senha conta GoodWe |
+| GoodWe | `SEMS_INV_ID` | Para dados reais | - | Serial do inversor |
+| GoodWe | `SEMS_LOGIN_REGION` | Não | `us` | Região login inicial (us/eu) |
+| GoodWe | `SEMS_DATA_REGION` | Não | `us` | Região preferida dados (auto-switch se necessário) |
+| Tuya | `TUYA_ACCESS_ID` | Para SmartPlug | - | Credencial Tuya Cloud |
+| Tuya | `TUYA_ACCESS_SECRET` | Para SmartPlug | - | Credencial Tuya Cloud |
+| Tuya | `TUYA_ENDPOINT` | Não | `https://openapi.tuyaus.com` | Endpoint região |
+| Tuya | `TUYA_DEVICE_ID` | Para SmartPlug | - | ID do dispositivo |
+| Tuya | `TUYA_USER_ID` | Opcional | - | Usado em fallback listagem |
+| Tuya | `TUYA_REGION` | Opcional | - | Região lógica adicional |
+
+Exemplo mínimo (.env):
+```
+SECRET_KEY=troque-para-uma-chave-forte
+FLASK_DEBUG=true
+DATABASE_URL=sqlite:///instance/solarmind.db
+
+# GoodWe (modo api)
+SEMS_ACCOUNT=seu_email
+SEMS_PASSWORD=sua_senha
+SEMS_INV_ID=serial
+SEMS_LOGIN_REGION=us
+SEMS_DATA_REGION=eu
+
+# Gemini
+ENABLE_GEMINI=true
+GEMINI_API_KEY=sua_api_key
+
+# IFTTT
+IFTTT_WEBHOOK_URL=https://maker.ifttt.com/trigger/
+IFTTT_KEY=xxxxxx
+```
 
 ## 🛠️ Tecnologias Utilizadas
 
@@ -348,6 +476,15 @@ Similar ao Alexa, mas usando o serviço Google Assistant no IFTTT.
 
 ## 📝 Changelog
 
+### v2.1.0 (2025-10-04) - Dashboard Solar Refinado
+- 🔧 Datas padronizadas com hora para consultas GoodWe (`YYYY-MM-DD 00:00:00`)
+- � Gráfico SOC usando timestamps reais da série `Cbattery1`
+- 📊 Gráficos Mensal e Anual REINTRODUZIDOS com agregação (API) ou simulação (mock)
+- 🎛️ Modo mock agora preenche todos os gráficos (incluindo mensal/anual) sem chamadas externas
+- 🛡️ Logging de diagnóstico para identificar séries vazias e códigos 100002 (auto-switch região)
+- � Injeção unificada de dados no template (reduz scripts duplicados)
+- 🧪 Base para diferenciar “sem dados” de zero legítimo (próxima melhoria visual)
+
 ### v2.0.0 (2025-09-09) - IA INTEGRATION 🤖
 - ✨ **Gemini AI**: Chat inteligente e geração de insights
 - 🕒 **APScheduler**: Resumos diários automáticos (21:30) e anúncios matinais (08:00)  
@@ -378,6 +515,51 @@ Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICE
 
 - FIAP - Faculdade de Informática e Administração Paulista
 - GoodWe - Inspiração para o projeto
+
+## 🚀 Deploy em Produção
+
+Opções suportadas / testadas:
+
+### 1. Gunicorn (Linux)
+```
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:8000 app:app
+```
+Adicionar variável `FLASK_DEBUG=false` e SECRET_KEY forte.
+
+### 2. Docker
+```
+docker build -t solarmind:2.1 .
+docker run -d --env-file .env -p 8000:5000 --name solarmind solarmind:2.1
+```
+
+### 3. Docker Compose
+```
+docker compose up -d
+```
+(Ver arquivo `docker-compose.yml` se presente; ajuste volumes para persistir `instance/`.)
+
+### 4. Render / Railway / Heroku-like
+Use o `Procfile` (exemplo):
+```
+web: gunicorn app:app --workers=4 --timeout=120 --log-level=info
+```
+
+### Hardening / Boas Práticas
+- SECRET_KEY forte (>= 32 chars) e nunca commitar `.env`
+- Desabilitar `FLASK_DEBUG` em produção
+- HTTPS (proxy reverso Nginx / Traefik)
+- Limitar origem se expor API publicamente (ex: configurar CORS seletivo)
+- Logs: enviar para stdout e coletar via stack (ELK / Loki) se necessário
+- Monitorar jobs do scheduler (desabilitar se não precisar: `ENABLE_SCHEDULER=false`)
+- Backups do banco: copiar `instance/solarmind.db`
+
+### Escalabilidade (roadmap)
+- Migrar para Postgres alterando `DATABASE_URL`
+- Adicionar cache Redis para respostas de API GoodWe
+- Separar worker de scheduler em container distinto
+
+---
 - Comunidade Flask pela excelente documentação
 - IFTTT pela plataforma de automação
 
