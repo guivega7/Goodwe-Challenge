@@ -6,10 +6,14 @@ TODOS os endpoints com dados simulados foram REMOVIDOS.
 """
 
 import os
+import json
 import time
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 import random
+from solarmind.mock_data_store import get_mock_daily_state, get_mock_battery_level
+from solarmind.services.gemini_client import generate_gemini_text
+from solarmind.services.weather_client import get_weather_forecast
 
 from extensions import logger
 from services.goodwe_client import GoodWeClient
@@ -26,6 +30,25 @@ api_bp = Blueprint('api', __name__)
 
 # Inicializar clientes
 goodwe_client = GoodWeClient()
+
+@api_bp.route('/api/solar/debug_goodwe')
+def debug_goodwe():
+    """Endpoint de depuração para inspecionar estado do cliente GoodWe."""
+    try:
+        return jsonify({
+            'ok': True,
+            'goodwe': {
+                'login_region': getattr(goodwe_client, 'login_region', None),
+                'data_region': getattr(goodwe_client, 'data_region', None),
+                'current_region': getattr(goodwe_client, 'region', None),
+                'base_override': getattr(goodwe_client, '_data_base_url_override', None),
+                'strict_https': getattr(goodwe_client, 'strict_https', None),
+                'debug': getattr(goodwe_client, 'debug', None),
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 # ---------------------- SIMPLE IN-MEMORY CACHE ---------------------- #
 _CACHE: dict[str, tuple[float, dict]] = {}
@@ -55,31 +78,201 @@ def _get_tuya_client() -> TuyaClient:
             raise
     return tuya_client
 
+# ---------------------- Controle Unificado de Dispositivos ---------------------- #
+def _find_device(reference: str) -> Aparelho | None:
+    """Procura aparelho por nome (case-insensitive), slug simplificado ou codigo_externo."""
+    if not reference:
+        return None
+    ref = reference.strip().lower()
+    ap = (Aparelho.query
+          .filter(Aparelho.nome.ilike(ref))
+          .first())
+    if not ap:
+        ap = (Aparelho.query
+              .filter(Aparelho.codigo_externo.ilike(ref))
+              .first())
+    return ap
 
-@api_bp.route('/api/status')
-def api_status():
+def _send_tuya_if_possible(aparelho: Aparelho | None, desired: bool) -> tuple[bool, dict | None]:
+    """Envia comando Tuya se aparelho tiver codigo_externo e retorna (sucesso, resposta_raw)."""
+    if not aparelho or not aparelho.codigo_externo:
+        return False, None
+    try:
+        client = _get_tuya_client()
+        resp = client.send_command(aparelho.codigo_externo, 'switch_1', desired)
+        ok = bool(resp) and resp.get('success', True) and 'error' not in resp
+        return ok, resp
+    except Exception as e:
+        logger.warning(f"Falha comando Tuya para {aparelho.codigo_externo}: {e}")
+        return False, {'error': str(e)}
+
+def control_device(target: str, turn_on: bool) -> dict:
+    """Liga ou desliga um dispositivo por nome ou codigo_externo.
+
+    Retorna dict com detalhes da operação.
     """
-    Endpoint para verificar status da API.
-    
-    Retorna:
-        JSON: Status geral da API
+    result = {
+        'input': target,
+        'acao': 'on' if turn_on else 'off',
+        'encontrado': False,
+        'fonte': None,
+        'tuya_ok': None,
+        'status_final': None,
+    }
+    ap = _find_device(target)
+    if ap:
+        result['encontrado'] = True
+        # Primeiro tenta Tuya se houver ligação
+        tuya_ok, tuya_raw = _send_tuya_if_possible(ap, turn_on)
+        result['tuya_ok'] = tuya_ok
+        if tuya_raw:
+            result['tuya_raw'] = tuya_raw
+        # Atualiza estado local sempre (mesmo se Tuya falhou para manter coerência interna)
+        ap.status = bool(turn_on)
+        if not ap.origem:
+            ap.origem = 'tuya' if ap.codigo_externo else 'manual'
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            result['db_error'] = str(e)
+        result['fonte'] = 'local+tuya' if ap.codigo_externo else 'local'
+        result['status_final'] = 'ON' if turn_on else 'OFF'
+    else:
+        result['status_final'] = 'UNKNOWN'
+    return result
+
+def device_off(target: str) -> dict:
+    return control_device(target, False)
+
+def device_on(target: str) -> dict:
+    return control_device(target, True)
+
+def eco_mode(prioridade_min: int | None = None) -> dict:
+    """Desliga vários dispositivos (modo economia). Se prioridade_min for fornecida,
+    desliga apenas aparelhos com prioridade >= prioridade_min.
     """
-    return jsonify({
-        'ok': True,
-        'service': 'SolarMind API',
-        'version': '2.0.0',
-        'mode': 'REAL_DATA_ONLY',
-        'timestamp': datetime.now().isoformat(),
-        'endpoints': {
-            'solar': {
-                '/api/solar/status': 'Status atual do sistema solar (dados reais)',
-                '/api/solar/data': 'Dados completos do sistema (dados reais)', 
-                '/api/solar/history': 'Histórico de produção (dados reais)',
-                '/api/solar/config': 'Configuração das credenciais SEMS'
-            }
+    q = Aparelho.query
+    if prioridade_min is not None:
+        try:
+            q = q.filter(Aparelho.prioridade >= prioridade_min)
+        except Exception:
+            pass
+    dispositivos = q.all()
+    altered = []
+    for ap in dispositivos:
+        # Evita desligar se já off
+        if ap.status:
+            off_res = device_off(ap.nome)
+            altered.append(off_res)
+    return {
+        'modo': 'economia',
+        'afetados': len(altered),
+        'detalhes': altered
+    }
+
+
+def _extract_ifttt_target():
+    payload = request.get_json(silent=True) if request.is_json else None
+    target = None
+    if payload:
+        target = payload.get('value1') or payload.get('device') or payload.get('nome')
+    if not target:
+        target = request.form.get('value1') or request.form.get('device') or request.form.get('nome')
+    return target
+
+@api_bp.route('/ifttt/desligar', methods=['POST'])
+def ifttt_desligar():
+    try:
+        target = _extract_ifttt_target()
+        if not target:
+            return jsonify({'ok': False, 'error': 'value1 (nome) ausente'}), 400
+        result = device_off(target)
+        if not result.get('encontrado'):
+            return jsonify({'ok': False, 'error': f"Dispositivo '{target}' não encontrado"}), 404
+        # Ajusta formato simplificado esperado
+        resp = {
+            'ok': True,
+            'dispositivo': result.get('input'),
+            'status_final': result.get('status_final'),
+            'fonte': result.get('fonte'),
+            'tuya_ok': result.get('tuya_ok')
         }
-    })
+        if 'tuya_raw' in result:
+            resp['tuya_raw'] = result['tuya_raw']
+        return jsonify(resp)
+    except Exception as e:
+        logger.error(f"Erro /ifttt/desligar: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
+@api_bp.route('/ifttt/ligar', methods=['POST'])
+def ifttt_ligar():
+    try:
+        print("--- ROTA /ifttt/ligar ACIONADA ---")
+        raw_body = request.get_data(as_text=True)
+        print(f"[IFTTT/LIGAR] Corpo bruto recebido: {raw_body}")
+
+        data = request.get_json(silent=True)
+        if data is None:
+            # Força parsing mesmo se o Content-Type vier incorreto (comum em integrações)
+            data = request.get_json(force=True, silent=True)
+        if not data and raw_body:
+            try:
+                data = json.loads(raw_body)
+            except Exception:
+                data = None
+        print(f"[IFTTT/LIGAR] JSON parseado: {data}")
+
+        target = None
+        if isinstance(data, dict):
+            target = data.get('value1') or data.get('device') or data.get('nome')
+        if not target:
+            target = request.form.get('value1') or request.form.get('device') or request.form.get('nome')
+        if not target:
+            print("ERRO: A chave 'value1' é obrigatória e não foi encontrada.")
+            return jsonify({'ok': False, 'error': "A chave 'value1' é obrigatória."}), 400
+
+        print(f"[IFTTT/LIGAR] Nome do aparelho extraído: {target}")
+        result = device_on(target)
+        if not result.get('encontrado'):
+            return jsonify({'ok': False, 'error': f"Dispositivo '{target}' não encontrado", 'details': result}), 404
+        resp = {
+            'ok': True,
+            'message': f"{target} ligado com sucesso.",
+            'dispositivo': result.get('input'),
+            'status_final': result.get('status_final'),
+            'fonte': result.get('fonte'),
+            'tuya_ok': result.get('tuya_ok')
+        }
+        if 'tuya_raw' in result:
+            resp['tuya_raw'] = result['tuya_raw']
+        return jsonify(resp), 200
+    except Exception as e:
+        print(f"ERRO CRÍTICO na rota /ifttt/ligar: {e}")
+        logger.error(f"Erro /ifttt/ligar: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@api_bp.route('/ifttt/modo_economia', methods=['POST'])
+def ifttt_modo_economia():
+    print("--- ROTA /ifttt/modo_economia ACIONADA ---")
+    try:
+        prioridade_min = None
+        if request.is_json:
+            pl = request.get_json(silent=True) or {}
+            prioridade_min = pl.get('prioridade_min')
+        result = eco_mode(prioridade_min)
+        # Normaliza resposta com campos esperados
+        payload = {
+            'ok': True,
+            'success': True,
+            'message': 'Modo economia ativado com sucesso.',
+            'details': result
+        }
+        return jsonify(payload), 200
+    except Exception as e:
+        print(f"ERRO na rota /ifttt/modo_economia: {e}")
+        logger.error(f"Erro /ifttt/modo_economia: {e}")
+        return jsonify({'ok': False, 'success': False, 'error': str(e)}), 500
 
 @api_bp.route('/api/solar/config')
 def solar_config():
@@ -89,12 +282,10 @@ def solar_config():
     Retorna:
         JSON: Informações sobre a configuração atual
     """
-    # Verificar se credenciais estão configuradas
     account = os.getenv('SEMS_ACCOUNT')
     password = os.getenv('SEMS_PASSWORD')
     inverter_id = os.getenv('SEMS_INV_ID')
     region = os.getenv('SEMS_DATA_REGION', 'US')
-    
     return jsonify({
         'ok': True,
         'config': {
@@ -102,7 +293,7 @@ def solar_config():
             'descricao': 'Todos os dados vêm da API GoodWe SEMS Portal',
             'credenciais_configuradas': {
                 'account': bool(account),
-                'password': bool(password), 
+                'password': bool(password),
                 'inverter_id': bool(inverter_id)
             },
             'regiao_sems': region,
@@ -116,23 +307,201 @@ def solar_config():
     })
 
 
-@api_bp.route('/api/solar/status')
+@api_bp.route('/api/solar/status', methods=['GET'])
 def solar_status():
-    """Status resumido (caching 30s)."""
-    cache_key = 'solar_status'
-    cached = _cache_get(cache_key)
-    if cached:
-        return jsonify({**cached, '_cache': True})
+    """Status do sistema em modo duplo: mock (default) ou API GoodWe."""
+    fonte = request.args.get('fonte', 'mock')
     try:
-        data = goodwe_client.build_status()
-        payload = {'ok': True, 'data': data, 'timestamp': datetime.now().isoformat()}
-        _cache_set(cache_key, payload, ttl=30)
-        return jsonify({**payload, '_cache': False})
-    except ValueError as ve:
-        return jsonify({'ok': False, 'error': str(ve)}), 400
+        if fonte == 'api':
+            print("--- ROTA /api/solar/status ACIONADA (API REAL) ---")
+            try:
+                # Usar a nova função de tempo real como fonte única
+                print("--- ROTA /api/solar/status: Chamando get_realtime_data() ---")
+                dados_reais = goodwe_client.get_realtime_data()
+                # Mantém o envelope com 'ok' para compatibilidade, mas os dados vêm do realtime
+                return jsonify({'ok': True, 'data': dados_reais, 'timestamp': datetime.now().isoformat(), '_mock': False})
+            except Exception as e:
+                print(f"ERRO na API real, usando fallback para mock: {e}")
+                logger.error(f"Erro /api/solar/status (api): {e}")
+                # fallback para mock
+        # Modo mock (default ou fallback)
+        print("--- ROTA /api/solar/status ACIONADA (MOCK) ---")
+        state = get_mock_daily_state()
+        mock_data = {
+            'soc_bateria': state['soc_bateria'],
+            'geracao_dia': state['geracao_dia'],
+            'economia_dia': state['economia_dia'],
+            'status_sistema': 'ONLINE'
+        }
+        return jsonify({'ok': True, 'data': mock_data, 'timestamp': datetime.now().isoformat(), '_mock': True, 'fallback': fonte=='api'})
     except Exception as e:
         logger.error(f"Erro /api/solar/status: {e}")
-        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/solar/debug_realtime_raw', methods=['GET'])
+def debug_realtime_raw_data():
+    """
+    Endpoint de depuração que retorna o JSON bruto da chamada de tempo real da GoodWe
+    para inspeção. Usa get_realtime_data(raw=True) e não aplica nenhum mapeamento.
+    """
+    print("--- ROTA DE DEBUG: /api/solar/debug_realtime_raw ACIONADA ---")
+    try:
+        raw_payload = goodwe_client.get_realtime_data(raw=True)
+        # Normaliza em um envelope com info de timestamp
+        return jsonify({
+            'ok': True,
+            'raw': raw_payload,
+            'timestamp': datetime.now().isoformat(),
+            'hint': 'Este payload é retornado diretamente da API GoodWe (GetMonitorDetailByPowerstationId)'
+        })
+    except Exception as e:
+        logger.error(f"Erro /api/solar/debug_realtime_raw: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/solar/relatorio_diario', methods=['GET'])
+def get_daily_report():
+    """Relatório diário em modo duplo: mock (default) ou API GoodWe."""
+    fonte = request.args.get('fonte', 'mock')
+    print("--- ROTA /api/solar/relatorio_diario ACIONADA ---")
+    try:
+        if fonte == 'api':
+            try:
+                dados = goodwe_client.build_data()
+                report_data = {
+                    'geracao_dia': dados.get('producao', {}).get('hoje', 0.0),
+                    'economia_dia': dados.get('economia', {}).get('hoje', 0.0),
+                    'soc_bateria': dados.get('bateria', {}).get('soc', None)
+                }
+                return jsonify({'ok': True, 'data': report_data, 'timestamp': datetime.now().isoformat(), '_mock': False})
+            except Exception as e:
+                print(f"ERRO na API real, usando fallback para mock: {e}")
+                logger.error(f"Erro /api/solar/relatorio_diario (api): {e}")
+                # segue para fallback
+        # Modo mock (default ou fallback)
+        state = get_mock_daily_state()
+        report_data = {
+            'geracao_dia': state['geracao_dia'],
+            'economia_dia': state['economia_dia'],
+            'soc_bateria': state.get('soc_bateria')
+        }
+        return jsonify({'ok': True, 'data': report_data, 'timestamp': datetime.now().isoformat(), '_mock': True, 'fallback': fonte=='api'})
+    except Exception as e:
+        logger.error(f"Erro em /api/solar/relatorio_diario: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@api_bp.route('/api/ia/plano_do_dia', methods=['GET'])
+def get_daily_plan():
+    """Endpoint que usa a IA do Gemini para gerar um plano de energia para o dia (respeita ?fonte=api e passa o SOC correto no prompt)."""
+    print("--- ROTA /api/ia/plano_do_dia ACIONADA (VERSÃO CORRIGIDA FINAL) ---")
+    fonte = request.args.get('fonte', 'mock')
+
+    try:
+        battery_level = 0
+        weather_today = "não disponível"
+
+        if fonte == 'api':
+            print("--- MODO API REAL (plano_do_dia) ---")
+            try:
+                dados_reais = goodwe_client.get_realtime_data()
+                # Suporta ambos formatos: direto {'soc_bateria': ...} ou envelope {'ok': True, 'data': {...}}
+                if isinstance(dados_reais, dict) and ('soc_bateria' in dados_reais):
+                    battery_level = dados_reais.get('soc_bateria', 0)
+                elif isinstance(dados_reais, dict) and dados_reais.get('ok') and isinstance(dados_reais.get('data'), dict):
+                    battery_level = dados_reais['data'].get('soc_bateria', 0)
+                else:
+                    raise ValueError("Formato inesperado de retorno do get_realtime_data()")
+            except Exception as e:
+                logger.error(f"Falha get_realtime_data() no plano_do_dia: {e}")
+                # Fallback para mock
+                state = get_mock_daily_state()
+                battery_level = state.get("soc_bateria", 0)
+            weather_today = get_weather_forecast()
+        else:
+            print("--- MODO MOCK (plano_do_dia) ---")
+            state = get_mock_daily_state()
+            battery_level = state.get("soc_bateria", 0)
+            weather_today = get_weather_forecast()
+
+        # Garante que battery_level é um número para o prompt
+        try:
+            battery_level = int(float(battery_level))
+        except (ValueError, TypeError):
+            battery_level = 0
+
+        print(f"--- DADOS USADOS PARA O PROMPT -> Bateria: {battery_level}%, Previsão: {weather_today} ---")
+
+        # Prompt objetivo para decisão
+        prompt = f"""
+        Você é o cérebro do Autopilot SolarMind. Analise os dados a seguir e retorne APENAS uma decisão em formato JSON válido com as chaves 'acao' e 'explicacao'.
+        Dados:
+        - Bateria_atual: {battery_level}%
+        - Previsao_hoje: {weather_today}
+        """
+
+        response_json_str = generate_gemini_text(prompt)
+        data = json.loads(response_json_str) if isinstance(response_json_str, str) else response_json_str
+
+        return jsonify({
+            'ok': True,
+            'data': {
+                'recomendacao': data,
+                'soc_bateria': battery_level,
+                'previsao': weather_today
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erro CRÍTICO em /api/ia/plano_do_dia: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    
+@api_bp.route('/api/ia/acao_proativa', methods=['GET'])
+def get_proactive_action():
+    """Cérebro do Autopilot: decisão (acao, explicacao) com modo duplo para origem dos dados."""
+    print("--- ROTA /api/ia/acao_proativa ACIONADA ---")
+    fonte = request.args.get('fonte', 'mock')
+    try:
+        # a) Estado atual do sistema, conforme fonte
+        battery_soc = None
+        if fonte == 'api':
+            try:
+                status = goodwe_client.build_status()
+                battery_soc = status.get('soc_bateria')
+            except Exception as e:
+                print(f"ERRO na API real, fallback para mock em /api/ia/acao_proativa: {e}")
+                logger.error(f"Erro /api/ia/acao_proativa (api): {e}")
+        if battery_soc is None:
+            state = get_mock_daily_state()
+            battery_soc = state.get('soc_bateria')
+
+        # b) Previsão do tempo (descrição simples)
+        weather = get_weather_forecast()
+
+        # c) Prompt avançado instruindo a IA a responder em JSON
+        prompt = f"""
+Você é o cérebro do Autopilot SolarMind. Analise os dados a seguir e retorne APENAS uma decisão em formato JSON válido com as chaves 'acao' e 'explicacao'.
+
+Regras:
+- Leia os dados e decida entre 'ATIVAR_MODO_ECO' ou 'MANTER_NORMAL'.
+- Justifique em português de forma clara e breve (1-2 frases), começando com um alerta se a condição for desfavorável (chuva/nublado e/ou bateria baixa), e reforçando benefício quando favorável (sol e bateria alta).
+- Não inclua texto fora do JSON e não use markdown.
+
+Dados:
+- Bateria_atual: {battery_soc}%
+- Previsao_hoje: {weather}
+"""
+
+        # d) Chamada à IA (mock) que retorna string JSON
+        response_json_str = generate_gemini_text(prompt)
+        data = json.loads(response_json_str) if isinstance(response_json_str, str) else response_json_str
+        if not isinstance(data, dict) or 'acao' not in data or 'explicacao' not in data:
+            raise ValueError('Resposta do Gemini não possui chaves esperadas.')
+
+        return jsonify({**data, '_mock': fonte!='api'}), 200
+    except Exception as e:
+        logger.error(f"Erro em /api/ia/acao_proativa: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @api_bp.route('/api/solar/data')

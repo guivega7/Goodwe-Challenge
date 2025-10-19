@@ -156,9 +156,9 @@
       <div class="tech-icon">
         <i class="fa-solid fa-bolt"></i>
       </div>
-      <h6 class="tech-label mb-2">Energia Hoje</h6>
-      <div id="kpi-energia-hoje" class="tech-value">{{ relatorio.energia_hoje or '...' }}</div>
-      <small class="text-muted">kWh gerados</small>
+      <h6 class="tech-label mb-2">Potência Atual</h6>
+      <div id="kpi-energia-hoje" class="tech-value">{{ relatorio.potencia_atual or '...' }}</div>
+      <small class="text-muted">W gerados</small>
     </div>
   </div>
   
@@ -198,41 +198,10 @@
   </div>
 </div>
 
-<!-- Estatísticas Acumuladas -->
-<div class="row g-4 mb-4">
-  <div class="col-md-3 col-sm-6">
-    <div class="glass p-4 text-center">
-      <i class="fa-solid fa-solar-panel fa-3x mb-3" style="color:#FE5800;"></i>
-      <h6 class="text-light mb-1">Total Gerado</h6>
-      <h3 class="fw-bold" style="color:#FE5800;">3,245.8</h3>
-      <small class="text-light">kWh acumulados</small>
-    </div>
+<!-- Link para Histórico Detalhado -->
+<div class="text-center mt-4 mb-5">
+    <a href="{{ url_for('dash.history_page') }}" class="btn btn-outline-primary">Ver Histórico Detalhado</a>
   </div>
-  <div class="col-md-3 col-sm-6">
-    <div class="glass p-4 text-center">
-      <i class="fa-solid fa-piggy-bank fa-3x mb-3" style="color:#28a745;"></i>
-      <h6 class="text-light mb-1">Economia Total</h6>
-      <h3 class="fw-bold" style="color:#28a745;">R$ 2,434.35</h3>
-      <small class="text-light">economizados</small>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6">
-    <div class="glass p-4 text-center">
-      <i class="fa-solid fa-leaf fa-3x mb-3" style="color:#20c997;"></i>
-      <h6 class="text-light mb-1">CO₂ Evitado</h6>
-      <h3 class="fw-bold" style="color:#20c997;">1,623.0</h3>
-      <small class="text-light">kg de CO₂</small>
-    </div>
-  </div>
-  <div class="col-md-3 col-sm-6">
-    <div class="glass p-4 text-center">
-      <i class="fa-solid fa-calendar-days fa-3x mb-3" style="color:#17a2b8;"></i>
-      <h6 class="text-light mb-1">Dias Ativos</h6>
-      <h3 class="fw-bold" style="color:#17a2b8;">287</h3>
-      <small class="text-light">dias gerando</small>
-    </div>
-  </div>
-</div>
 
 <!-- === CENTRAL DE INSIGHTS === -->
 <div class="row mb-5">
@@ -251,49 +220,21 @@
       </div>
       
       <div id="insightsContent">
-        <!-- Insight Performance -->
-        <div class="insight-card insight-success">
-          <div class="d-flex align-items-center">
-            <i class="fas fa-solar-panel me-3 text-success" style="font-size: 1.4em;"></i>
-            <div>
-              <strong class="text-success">Performance Excelente</strong><br>
-              <span class="text-light">Sistema gerando <strong class="text-accent-clean">25.3 kWh</strong> com eficiência de <strong class="text-accent-clean">135%</strong> do consumo</span>
+        {% if insights %}
+          {% for ins in insights %}
+          <div class="insight-card insight-{{ ins.variant or 'info' }}">
+            <div class="d-flex align-items-center">
+              <i class="fas {{ ins.icon or 'fa-info-circle' }} me-3 {{ ins.color or 'text-light' }}" style="font-size: 1.4em;"></i>
+              <div>
+                <strong class="{{ ins.color or 'text-light' }}">{{ ins.titulo }}</strong><br>
+                <span class="text-light">{{ ins.texto }}</span>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <!-- Insight Bateria -->
-        <div class="insight-card insight-info">
-          <div class="d-flex align-items-center">
-            <i class="fas fa-battery-three-quarters me-3 text-primary" style="font-size: 1.4em;"></i>
-            <div>
-              <strong class="text-primary-clean">Armazenamento Otimizado</strong><br>
-              <span class="text-light">Bateria em <strong class="text-accent-clean">87%</strong> - autonomia estimada até <strong class="text-accent-clean">18h</strong></span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Insight Ambiental -->
-        <div class="insight-card insight-warning">
-          <div class="d-flex align-items-center">
-            <i class="fas fa-leaf me-3 text-warning" style="font-size: 1.4em;"></i>
-            <div>
-              <strong class="text-warning">Impacto Sustentável</strong><br>
-              <span class="text-light">CO₂ evitado: <strong class="text-accent-clean">12.6kg</strong> equivale a <strong class="text-accent-clean">6.3km</strong> de carro não rodados</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Insight Recomendação -->
-        <div class="insight-card insight-accent">
-          <div class="d-flex align-items-center">
-            <i class="fas fa-lightbulb me-3 text-accent-clean" style="font-size: 1.4em;"></i>
-            <div>
-              <strong class="text-accent-clean">Recomendação Inteligente</strong><br>
-              <span class="text-light">Use máquina de lavar às <strong class="text-success">14h</strong> para economizar <strong class="text-success">R$ 2,50</strong></span>
-            </div>
-          </div>
-        </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted">Sem insights no momento.</div>
+        {% endif %}
         
         <div class="mt-4 p-3" style="background: rgba(0, 0, 0, 0.2); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
           <small class="text-muted d-flex align-items-center">
@@ -311,64 +252,23 @@
   </div>
 </div>
 
-<!-- Gráficos Combinados -->
+<!-- Gráficos do Dia -->
 <div class="row g-4 mb-4">
-  <!-- Gráfico Histórico 7 Dias -->
-  <div class="col-lg-8">
-    <div class="glass p-4">
-      <div class="d-flex align-items-center mb-4">
-        <i class="fa-solid fa-chart-area fa-2x me-3" style="color:#FE5800;"></i>
-        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Histórico dos Últimos 7 Dias</h5>
-      </div>
-      <div style="position: relative; height: 400px;">
-        <canvas id="graficoHistorico"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Gráfico de Distribuição de Energia -->
-  <div class="col-lg-4">
+  <!-- Gráfico de Distribuição de Energia (Hoje) -->
+  <div class="col-lg-6">
     <div class="glass p-4">
       <div class="d-flex align-items-center mb-4">
         <i class="fa-solid fa-chart-pie fa-2x me-3" style="color:#FE5800;"></i>
         <h5 class="fw-semibold mb-0" style="color:#FE5800;">Distribuição Hoje</h5>
       </div>
-      <div style="position: relative; height: 400px;">
+      <div style="position: relative; height: 300px;">
         <canvas id="graficoDistribuicao"></canvas>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Gráficos Estatísticas (Mensal e Anual) -->
-<div class="row g-4 mb-4">
+  <!-- Gráfico Estado da Bateria (Hoje) -->
   <div class="col-lg-6">
-    <div class="glass p-4">
-      <div class="d-flex align-items-center mb-3">
-        <i class="fa-solid fa-chart-column fa-2x me-3" style="color:#FE5800;"></i>
-        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Geração Mensal</h5>
-      </div>
-      <div style="position: relative; height: 300px;">
-        <canvas id="graficoMensal"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-6">
-    <div class="glass p-4">
-      <div class="d-flex align-items-center mb-3">
-        <i class="fa-solid fa-chart-area fa-2x me-3" style="color:#FE5800;"></i>
-        <h5 class="fw-semibold mb-0" style="color:#FE5800;">Comparativo Anual</h5>
-      </div>
-      <div style="position: relative; height: 300px;">
-        <canvas id="graficoAnual"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Gráfico Estado da Bateria -->
-<div class="row g-4 mb-4">
-  <div class="col-12">
     <div class="glass p-4">
       <div class="d-flex align-items-center mb-3">
         <i class="fa-solid fa-battery-half fa-2x me-3" style="color:#FE5800;"></i>
@@ -380,6 +280,8 @@
     </div>
   </div>
 </div>
+
+<!-- Removidos: Geração Mensal, Comparativo Anual e cards acumulados (agora em Histórico) -->
 
 <!-- Controles de Configuração -->
 <div class="row g-4 mb-4">
@@ -422,13 +324,7 @@
 const fonteSelecionada = new URLSearchParams(window.location.search).get('fonte') || 'mock';
 console.log('Fonte selecionada:', fonteSelecionada);
 let chartHistorico, chartDistribuicao, chartBateria;
-// Pacote de dados adicionais (mensal/annual) serializado em um objeto
-const _extraData = JSON.parse(String.raw`{{ ({
-  'monthly': monthly_data if monthly_data is defined else None,
-  'annual': annual_data if annual_data is defined else None
-}) | tojson | safe }}`);
-const monthlyData = _extraData.monthly;
-const annualData = _extraData.annual;
+// Dados extras (mensal/anual) foram movidos para a página de Histórico
 
 function fmt(num){ if(num===undefined||num===null||isNaN(num)) return 0; return Math.round(num*100)/100; }
 async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
@@ -456,6 +352,10 @@ async function carregarStatus(){
         icon.className = `fa-solid ${isOnline ? 'fa-wifi' : 'fa-wifi-slash'}`;
         document.getElementById('kpi-status-text').classList.toggle('status-online', isOnline);
         updateKpiCard('kpi-last-update', new Date(res.data.timestamp).toLocaleTimeString());
+        
+        // Atualizar potência atual
+        const potenciaAtual = status.potencia_atual || 0;
+        updateKpiCard('kpi-energia-hoje', fmt(potenciaAtual));
 
     } catch(e){ console.warn('status fail', e);} 
 }
@@ -497,22 +397,17 @@ async function carregarHistorico(){
 }
 
 function initCharts(){
-  chartHistorico = new Chart(document.getElementById('graficoHistorico'), { type:'line', data:{ labels:[], datasets:[ {label:'Energia Gerada (kWh)', data:[], borderColor:'#FE5800', backgroundColor:'rgba(254,88,0,0.15)', tension:0.35, fill:true}, {label:'Energia Consumida (kWh)', data:[], borderColor:'#17a2b8', backgroundColor:'rgba(23,162,184,0.15)', tension:0.35, fill:true} ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
-  chartDistribuicao = new Chart(document.getElementById('graficoDistribuicao'), { type:'doughnut', data:{ labels:['Energia Gerada','Energia Consumida','Excedente'], datasets:[{ data:[0,0,0], backgroundColor:['#FE5800','#17a2b8','#28a745'], borderColor:'#fff', borderWidth:2 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:'#fff', padding:20 } } } } });
-  chartBateria = new Chart(document.getElementById('graficoBateria'), { type:'line', data:{ labels:[], datasets:[{label:'SOC Bateria (%)', data:[], borderColor:'#00bfff', backgroundColor:'rgba(0,191,255,0.15)', tension:0.35, fill:true}]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, max:100, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
-  if (monthlyData) {
-    const ctxM = document.getElementById('graficoMensal');
-    if (ctxM) {
-      new Chart(ctxM, { type:'bar', data:{ labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], datasets:[{ label:'Geração Mensal (kWh)', data: monthlyData, backgroundColor:'#FE5800', borderRadius:8 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'} }, x:{ ticks:{color:'#fff'} } } } });
-    }
+  const elHist = document.getElementById('graficoHistorico');
+  if (elHist) {
+    chartHistorico = new Chart(elHist, { type:'line', data:{ labels:[], datasets:[ {label:'Energia Gerada (kWh)', data:[], borderColor:'#FE5800', backgroundColor:'rgba(254,88,0,0.15)', tension:0.35, fill:true}, {label:'Energia Consumida (kWh)', data:[], borderColor:'#17a2b8', backgroundColor:'rgba(23,162,184,0.15)', tension:0.35, fill:true} ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
   }
-  if (annualData) {
-    const ctxA = document.getElementById('graficoAnual');
-    if (ctxA) {
-      const currentYear = new Date().getFullYear();
-      const labelsA = [currentYear-4, currentYear-3, currentYear-2, currentYear-1, currentYear];
-      new Chart(ctxA, { type:'line', data:{ labels: labelsA, datasets:[{ label:'Geração Anual (kWh)', data: annualData, borderColor:'#28a745', backgroundColor:'rgba(40,167,69,0.15)', tension:0.35, fill:true }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#fff'} }, x:{ ticks:{color:'#fff'} } } } });
-    }
+  const elDist = document.getElementById('graficoDistribuicao');
+  if (elDist) {
+    chartDistribuicao = new Chart(elDist, { type:'doughnut', data:{ labels:['Energia Gerada','Energia Consumida','Excedente'], datasets:[{ data:[0,0,0], backgroundColor:['#FE5800','#17a2b8','#28a745'], borderColor:'#fff', borderWidth:2 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:'#fff', padding:20 } } } } });
+  }
+  const elBat = document.getElementById('graficoBateria');
+  if (elBat) {
+    chartBateria = new Chart(elBat, { type:'line', data:{ labels:[], datasets:[{label:'SOC Bateria (%)', data:[], borderColor:'#00bfff', backgroundColor:'rgba(0,191,255,0.15)', tension:0.35, fill:true}]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#fff'} } }, scales:{ y:{ beginAtZero:true, max:100, ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} }, x:{ ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'} } } } });
   }
 }
 

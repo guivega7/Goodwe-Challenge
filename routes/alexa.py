@@ -2,8 +2,43 @@ from flask import Blueprint, request, jsonify
 from extensions import db
 from models.aparelho import Aparelho
 from datetime import datetime
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+
+
+def _slug(text: str) -> str:
+    if not text:
+        return ''
+    t = text.lower().strip()
+    t = re.sub(r'[^a-z0-9]+', '-', t)
+    t = re.sub(r'-+', '-', t).strip('-')
+    return t or text.lower()
 
 alexa_bp = Blueprint('alexa', __name__)
+
+
+@alexa_bp.route('/alexa/ping', methods=['GET'])
+def alexa_ping():
+    """Healthcheck simples para Lambda ou monitoramentos."""
+    return jsonify({
+        'status': 'ok',
+        'ts': datetime.utcnow().isoformat() + 'Z'
+    })
+
+
+@alexa_bp.route('/alexa/reportstate', methods=['POST'])
+def alexa_report_state():
+    """Stub de ReportState futuro (pode ser chamado manualmente ou por scheduler).
+
+    Alexa Smart Home normalmente exige eventos proativos (ChangeReport) apenas
+    se proactivelyReported=True. Como definimos False no Discovery, isto é opcional.
+    """
+    body = request.get_json(silent=True) or {}
+    logger.info('[Alexa][ReportState] payload=%s', body)
+    # Retornar formato neutro por enquanto
+    return jsonify({'ok': True, 'note': 'ReportState stub - não configurado para proativo'})
 
 
 @alexa_bp.route('/alexa', methods=['POST'])
@@ -14,7 +49,7 @@ def alexa_webhook():
     Responde no formato esperado pela Alexa (response.outputSpeech).
     """
     body = request.get_json(silent=True) or {}
-    print('[Alexa] Payload recebido:', body)
+    logger.info('[Alexa] Payload recebido=%s', str(body)[:800])
 
     # 1) Suporte a Smart Home (payload raiz "directive")
     if 'directive' in body:
@@ -27,7 +62,7 @@ def alexa_webhook():
 
         # Authorization - AcceptGrant (requerido por Smart Home com Account Linking)
         if namespace == 'Alexa.Authorization' and name == 'AcceptGrant':
-            # Normalmente você armazena o grant code e grantee token. Para teste, apenas responda sucesso.
+            # Para implementação futura: armazenar grantCode / grantee.token em tabela.
             return jsonify({
                 'event': {
                     'header': {
@@ -47,18 +82,19 @@ def alexa_webhook():
             try:
                 dispositivos = Aparelho.query.filter_by(usuario_id=usuario_id).all()
             except Exception as e:
-                print('[Alexa][Discovery] Erro ao buscar dispositivos:', e)
+                logger.exception('[Alexa][Discovery] Erro ao buscar dispositivos: %s', e)
                 dispositivos = []
 
             for ap in dispositivos:
                 friendly = ap.nome
+                endpoint_id = _slug(friendly)
                 endpoint_obj = {
-                    'endpointId': ap.nome,
+                    'endpointId': endpoint_id,
                     'manufacturerName': 'SolarMind',
                     'friendlyName': friendly,
                     'description': f'Dispositivo {friendly} controlado pelo SolarMind',
                     'displayCategories': ['SWITCH'],
-                    'cookie': {},
+                    'cookie': {'originalName': friendly},
                     'capabilities': [
                         {
                             'type': 'AlexaInterface',
@@ -94,7 +130,11 @@ def alexa_webhook():
         # Apenas PowerController básico
         if namespace == 'Alexa.PowerController' and endpoint_id:
             usuario_id = 1
-            ap = Aparelho.query.filter_by(nome=endpoint_id, usuario_id=usuario_id).first()
+            normalized = endpoint_id.lower()
+            ap = (Aparelho.query
+                  .filter(Aparelho.usuario_id == usuario_id)
+                  .filter((Aparelho.nome.ilike(normalized)) | (Aparelho.nome.ilike(endpoint_id)))
+                  .first())
             if not ap:
                 # Resposta de erro mínima
                 return jsonify({
@@ -124,6 +164,8 @@ def alexa_webhook():
             else:
                 state_val = 'UNKNOWN'
             db.session.commit()
+
+            logger.info('[Alexa][PowerController] endpoint=%s action=%s state=%s', endpoint_id, name, state_val)
 
             return jsonify({
                 'context': {
@@ -188,11 +230,14 @@ def alexa_webhook():
         if intent_name == 'DesligarDispositivoIntent' and dispositivo:
             # Simula usuário logado em desenvolvimento; ajuste para sua auth real
             usuario_id = 1
-
-            ap = Aparelho.query.filter_by(nome=dispositivo, usuario_id=usuario_id).first()
+            device_slug = _slug(dispositivo)
+            ap = (Aparelho.query
+                  .filter(Aparelho.usuario_id == usuario_id)
+                  .filter((Aparelho.nome.ilike(dispositivo)) | (Aparelho.nome.ilike(device_slug)))
+                  .first())
             if not ap:
                 msg = f"Não encontrei um dispositivo chamado {dispositivo}."
-                print('[Alexa] ', msg)
+                logger.warning('[Alexa][Intent] dispositivo_nao_encontrado=%s', dispositivo)
                 return jsonify({
                     'version': '1.0',
                     'response': {
@@ -207,6 +252,8 @@ def alexa_webhook():
                 ap.status = False
                 db.session.commit()
                 msg = f"{dispositivo} desligado com sucesso."
+
+            logger.info('[Alexa][Intent] intent=%s dispositivo=%s resultado=%s', intent_name, dispositivo, msg)
 
             return jsonify({
                 'version': '1.0',
